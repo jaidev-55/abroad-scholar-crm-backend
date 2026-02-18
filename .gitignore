@@ -137,3 +137,12 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+/generated/prisma
+
+
+node_modules
+.env
+dist
+generated
+
