@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
@@ -56,6 +60,63 @@ export class AuthService {
     return {
       message: "Login successful",
       access_token: this.jwtService.sign(payload),
+    };
+  }
+  // show User List
+  async getUsers() {
+    return this.prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+  }
+// update user Details
+  async updateUser(id: string, dto: any) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+    const updatedUser = await this.prisma.user.update({
+      where: { id },
+      data: {
+        name: dto.name ?? user.name,
+        email: dto.email ?? user.email,
+        role: dto.role ?? user.role,
+      },
+    });
+
+    return {
+      message: "User updated successfully",
+      user: updatedUser,
+    };
+  }
+  // Delete existing user
+  async deleteUser(id: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException("User not found");
+    }
+
+    await this.prisma.user.delete({
+      where: { id },
+    });
+
+    return {
+      message: "User deleted successfully",
+      userId: id,
     };
   }
 }
