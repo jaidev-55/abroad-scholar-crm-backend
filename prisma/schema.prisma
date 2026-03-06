@@ -17,18 +17,18 @@ enum UserRole {
 
 // User table (Admin & Counselors)
 model User {
-  id         String         @id @default(uuid())
-  name       String
-  email      String         @unique
-  password   String
-  role       UserRole       @default(COUNSELOR)
-  leads      Lead[]
-  activities LeadActivity[]
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  id           String         @id @default(uuid())
+  name         String
+  email        String         @unique
+  password     String
+  role         UserRole       @default(COUNSELOR)
+  isVerified   Boolean        @default(false)
+  leads        Lead[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  LeadActivity LeadActivity[]
 }
 
-// LEAD ENUMS (Fixed Pipeline Version)
 
 // Lead stages (Pipeline columns)
 enum LeadStatus {
@@ -53,6 +53,16 @@ enum LeadPriority {
   HOT
   WARM
   COLD
+}
+// Lost lead reasons
+enum LostReason {
+  NO_RESPONSE
+  NOT_INTERESTED
+  FINANCIAL_ISSUE
+  CHOSE_OTHER_CONSULTANT
+  NOT_ELIGIBLE
+  DUPLICATE_LEAD
+  OTHER
 }
 
 model LeadNote {
@@ -84,14 +94,18 @@ model Lead {
   counselorId  String?
   counselor    User?     @relation(fields: [counselorId], references: [id])
   followUpDate DateTime?
-  lostReason   String?
 
-  notes LeadNote[]
 
-  // Timestamps 
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  LeadActivity LeadActivity[]
+  // Lost reason 
+  lostReason   LostReason?
+
+  // Relations
+  notes      LeadNote[]
+  activities LeadActivity[]
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Indexes
   @@index([status])
@@ -101,20 +115,19 @@ model Lead {
   @@index([counselorId])
   @@index([followUpDate])
   @@index([createdAt])
-
-
+  @@index([lostReason])
 }
 
-// Leads Activity
+// Lead Activity Timeline
 model LeadActivity {
   id        String       @id @default(uuid())
   type      ActivityType
   message   String
   meta      Json?
-  lead      Lead         @relation(fields: [leadId], references: [id])
   leadId    String
-  user      User?        @relation(fields: [userId], references: [id])
+  lead      Lead         @relation(fields: [leadId], references: [id])
   userId    String?
+  user      User?        @relation(fields: [userId], references: [id])
   createdAt DateTime     @default(now())
 }
 
@@ -125,3 +138,42 @@ enum ActivityType {
   STATUS_CHANGE
   EDIT
 }
+
+// OTP Verification
+model OtpVerification {
+  id        String    @id @default(uuid())
+  email     String
+  otp       String
+  name      String    @default("")  
+  password  String    @default("")   
+  role      UserRole  @default(COUNSELOR)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  @@index([email])
+}
+
+
+// Password Reset
+model PasswordReset {
+  id        String   @id @default(uuid())
+  email     String
+  otp       String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+
+// Email Templates
+model EmailTemplate {
+  id         String   @id @default(uuid())
+  name       String
+  subject    String
+  content    String
+  attachment String? 
+  createdAt  DateTime @default(now())
+}
+
+
+
+

@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsNumber, IsEnum } from "class-validator";
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsEnum,
+  IsDateString,
+} from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 // Possible outcomes of a counselor call with a lead
@@ -34,4 +40,12 @@ export class CreateCallLogDto {
   @IsOptional()
   @IsNumber()
   rating?: number;
+
+  // Next follow-up date for this lead
+  @ApiProperty({
+    example: "2026-03-15T10:00:00.000Z",
+    description: "Next follow-up date for this lead",
+  })
+  @IsDateString()
+  followUpDate!: string;
 }

@@ -14,6 +14,8 @@ import { UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
+import { Req } from "@nestjs/common";
+import { Request } from "express";
 import {
   ApiTags,
   ApiOperation,
@@ -27,6 +29,7 @@ import { CreateNoteDto } from "./dto/create-note.dto";
 import { CreateCallLogDto } from "./dto/create-call-log.dto";
 import { MarkLostDto } from "./dto/mark-lost.dto";
 import { ActivityType } from "@prisma/client";
+import { SendTemplateEmailDto } from "./dto/send-template-email.dto";
 
 @ApiTags("Leads")
 @ApiBearerAuth()
@@ -59,10 +62,9 @@ export class LeadsController {
   }
 
   // Fetch all leads with optional filters
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Get all leads list" })
-  @Get()
   @ApiQuery({ name: "search", required: false })
-  @ApiQuery({ name: "stage", required: false })
   @ApiQuery({ name: "source", required: false })
   @ApiQuery({ name: "counselorId", required: false })
   @ApiQuery({ name: "country", required: false })
@@ -73,9 +75,11 @@ export class LeadsController {
   @ApiQuery({ name: "followUpTo", required: false })
   @ApiQuery({ name: "startDate", required: false })
   @ApiQuery({ name: "endDate", required: false })
+  @ApiQuery({ name: "page", required: false })
+  @ApiQuery({ name: "limit", required: false })
+  @Get()
   findAll(
     @Query("search") search?: string,
-    @Query("stage") stage?: string,
     @Query("source") source?: string,
     @Query("counselorId") counselorId?: string,
     @Query("country") country?: string,
@@ -88,23 +92,26 @@ export class LeadsController {
     @Query("endDate") endDate?: string,
     @Query("page") page?: number,
     @Query("limit") limit?: number,
+    @Req() req?: Request,
   ) {
-    return this.leadsService.findAll({
-      search,
-      stage,
-      source,
-      counselorId,
-      country,
-      priority,
-      status,
-      lostReason,
-      followUpFrom,
-      followUpTo,
-      startDate,
-      endDate,
-      page,
-      limit,
-    });
+    return this.leadsService.findAll(
+      {
+        search,
+        source,
+        counselorId,
+        country,
+        priority,
+        status,
+        lostReason,
+        followUpFrom,
+        followUpTo,
+        startDate,
+        endDate,
+        page,
+        limit,
+      },
+      req?.user,
+    );
   }
 
   // Get single lead by ID
@@ -116,10 +123,15 @@ export class LeadsController {
 
   // Update lead details or status
   @Patch(":id")
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Update entire lead details" })
   @ApiParam({ name: "id", description: "Lead ID" })
-  updateLead(@Param("id") id: string, @Body() dto: UpdateLeadDto) {
-    return this.leadsService.updateLead(id, dto);
+  updateLead(
+    @Param("id") id: string,
+    @Body() dto: UpdateLeadDto,
+    @Req() req: Request,
+  ) {
+    return this.leadsService.updateLead(id, dto, req.user);
   }
 
   // Get activity timeline for a lead
@@ -138,7 +150,7 @@ export class LeadsController {
 
   // Mark lead as LOST
   @Post(":id/mark-lost")
-  @ApiOperation({ summary: "Mark lead as lost" })
+  @ApiOperation({ summary: "Mark lead as lost (requires reason)" })
   markAsLost(@Param("id") id: string, @Body() dto: MarkLostDto) {
     return this.leadsService.markAsLost(id, dto);
   }
@@ -148,5 +160,14 @@ export class LeadsController {
   @ApiOperation({ summary: "Log call activity" })
   logCall(@Param("id") id: string, @Body() dto: CreateCallLogDto) {
     return this.leadsService.logCall(id, dto);
+  }
+
+  @Post(":id/send-template-email")
+  @ApiOperation({ summary: "Send email using template" })
+  sendTemplateEmail(
+    @Param("id") leadId: string,
+    @Body() dto: SendTemplateEmailDto,
+  ) {
+    return this.leadsService.sendTemplateEmail(leadId, dto.templateId);
   }
 }
