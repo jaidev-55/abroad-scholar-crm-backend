@@ -19,4 +19,4 @@ RUN npm run build
 EXPOSE 5000
 
 # Run production build
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/src/main.js"]
