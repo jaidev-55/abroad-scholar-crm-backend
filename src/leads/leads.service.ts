@@ -10,6 +10,7 @@ import { CreateCallLogDto } from "./dto/create-call-log.dto";
 import { ActivityType } from "@prisma/client";
 import * as nodemailer from "nodemailer";
 import * as path from "path";
+import { LostReason } from "@prisma/client";
 
 @Injectable()
 export class LeadsService {
@@ -69,9 +70,17 @@ export class LeadsService {
     // Create lead
     const newLead = await this.prisma.lead.create({
       data: {
-        ...dto,
+        fullName: dto.fullName,
+        phone: dto.phone,
+        email: dto.email,
+        country: dto.country,
+        source: dto.source,
+        priority: dto.priority,
+        ieltsScore: dto.ieltsScore,
+        followUpDate: dto.followUpDate ? new Date(dto.followUpDate) : undefined,
         counselorId: assignedCounselorId,
         status: dto.status ?? "NEW",
+        lostReason: dto.lostReason ? (dto.lostReason as LostReason) : undefined,
       },
     });
 
@@ -258,7 +267,7 @@ export class LeadsService {
       where: { id },
       data: {
         ...dto,
-        counselorId: dto.counselorId ?? existingLead.counselorId,
+        lostReason: dto.lostReason ? (dto.lostReason as LostReason) : undefined,
       },
     });
 
@@ -449,7 +458,7 @@ export class LeadsService {
       where: { id },
       data: {
         status: "LOST",
-        lostReason: dto.lostReason,
+        lostReason: dto.lostReason as LostReason,
       },
     });
 

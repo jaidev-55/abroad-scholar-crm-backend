@@ -6,7 +6,12 @@ import {
   IsEmail,
 } from "class-validator";
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { LeadStatus, LeadSource, LeadPriority } from "@prisma/client";
+import {
+  LeadStatus,
+  LeadSource,
+  LeadPriority,
+  LostReason,
+} from "@prisma/client";
 
 export class UpdateLeadDto {
   // Update lead full name
@@ -68,10 +73,8 @@ export class UpdateLeadDto {
   followUpDate?: string;
 
   // Required when marking lead as LOST
-  @ApiPropertyOptional({
-    example: "Student chose another consultant",
-  })
+  @ApiPropertyOptional({ enum: LostReason })
   @IsOptional()
-  @IsString()
-  lostReason?: string;
+  @IsEnum(LostReason)
+  lostReason?: LostReason;
 }
