@@ -16,6 +16,12 @@ import { JwtAuthGuard } from "./jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { UpdateUserDto } from "./dto/update-user.dto";
+import { VerifyOtpDto } from "./dto/verify-otp.dto";
+import { ResendOtpDto } from "./dto/resend-otp.dto";
+import { ForgotPasswordDto } from "./dto/forgot-password.dto";
+import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { Req } from "@nestjs/common";
+import { Request } from "express";
 
 @ApiBearerAuth()
 @Controller("auth")
@@ -26,10 +32,28 @@ export class AuthController {
   register(@Body() body: RegisterDto) {
     return this.authService.register(body);
   }
+  // Verify Otp
+  @Post("verify-otp")
+  verifyOtp(@Body() dto: VerifyOtpDto) {
+    return this.authService.verifyOtp(dto.email, dto.otp);
+  }
+  // Resend Otp
+  @Post("resend-otp")
+  resendOtp(@Body() dto: ResendOtpDto) {
+    return this.authService.resendOtp(dto.email);
+  }
   // Login endpoint
   @Post("login")
   login(@Body() body: LoginDto) {
     return this.authService.login(body.email, body.password);
+  }
+
+  // Get logged-in user profile
+  @Get("me")
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "Get current logged-in user" })
+  getCurrentUser(@Req() req: Request) {
+    return req.user;
   }
 
   //List Users
@@ -59,5 +83,19 @@ export class AuthController {
   @ApiParam({ name: "id", description: "User ID" })
   deleteUser(@Param("id") id: string) {
     return this.authService.deleteUser(id);
+  }
+
+  // Send OTP to user's email for password reset
+  @Post("forgot-password")
+  @ApiOperation({ summary: "Send forgot password OTP" })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  // Reset user password using the OTP received in email
+  @Post("reset-password")
+  @ApiOperation({ summary: "Reset password using OTP" })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 }

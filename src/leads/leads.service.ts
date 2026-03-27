@@ -8,6 +8,8 @@ import { CreateLeadDto } from "./dto/create-lead.dto";
 import { UpdateLeadDto } from "./dto/update-lead.dto";
 import { CreateCallLogDto } from "./dto/create-call-log.dto";
 import { ActivityType } from "@prisma/client";
+import * as nodemailer from "nodemailer";
+import * as path from "path";
 
 @Injectable()
 export class LeadsService {
@@ -28,31 +30,58 @@ export class LeadsService {
       throw new BadRequestException("Lead cannot be created directly as LOST");
     }
 
-    // Validate assigned counselor
-    if (dto.counselorId) {
-      const counselor = await this.prisma.user.findUnique({
-        where: { id: dto.counselorId },
-      });
+    // Get all counselors for round-robin assignment
+    const counselors = await this.prisma.user.findMany({
+      where: { role: "COUNSELOR" },
+      orderBy: { createdAt: "asc" },
+    });
 
-      if (!counselor) {
-        throw new BadRequestException("Invalid counselor ID");
-      }
+    if (counselors.length === 0) {
+      throw new BadRequestException("No counselors available for assignment");
     }
+
+    // Find the last assigned lead
+    const lastLead = await this.prisma.lead.findFirst({
+      where: { counselorId: { not: null } },
+      orderBy: { createdAt: "desc" },
+    });
+
+    let nextCounselorId: string;
+
+    if (!lastLead) {
+      // First lead -> assign first counselor
+      nextCounselorId = counselors[0].id;
+    } else {
+      const lastIndex = counselors.findIndex(
+        (c) => c.id === lastLead.counselorId,
+      );
+
+      // If previous counselor not found -> restart rotation
+      const nextIndex =
+        lastIndex === -1 ? 0 : (lastIndex + 1) % counselors.length;
+
+      nextCounselorId = counselors[nextIndex].id;
+    }
+
+    // Final counselor assignment (manual override allowed)
+    const assignedCounselorId = dto.counselorId ?? nextCounselorId;
+
     // Create lead
     const newLead = await this.prisma.lead.create({
       data: {
         ...dto,
+        counselorId: assignedCounselorId,
         status: dto.status ?? "NEW",
-        counselorId: dto.counselorId ?? null,
       },
     });
 
-    // Log activity for lead creation
+    // Log activity
     await this.prisma.leadActivity.create({
       data: {
         type: "EDIT",
-        message: "Lead created",
+        message: "Lead created and assigned to counselor",
         leadId: newLead.id,
+        userId: assignedCounselorId,
       },
     });
 
@@ -60,10 +89,9 @@ export class LeadsService {
   }
 
   // Fetch leads with filters and optional pagination
-  async findAll(filters: any) {
+  async findAll(filters: any, user: any) {
     const {
       search,
-      stage,
       source,
       counselorId,
       country,
@@ -90,7 +118,7 @@ export class LeadsService {
     }
 
     //  Exact match filters
-    if (stage) where.stage = stage;
+
     if (source) where.source = source;
     if (counselorId) where.counselorId = counselorId;
     if (country) where.country = country;
@@ -115,7 +143,7 @@ export class LeadsService {
 
     // If pagination not provided -> return all (Pipeline view)
     if (!page || !limit) {
-      return this.prisma.lead.findMany({
+      const leads = await this.prisma.lead.findMany({
         where,
         include: {
           counselor: true,
@@ -125,6 +153,16 @@ export class LeadsService {
         },
         orderBy: { createdAt: "desc" },
       });
+
+      // RBAC: hide source for counselors
+      if (user?.role === "COUNSELOR") {
+        return leads.map((lead) => {
+          const { source, ...rest } = lead;
+          return rest;
+        });
+      }
+
+      return leads;
     }
 
     // Pagination mode (All Leads table)
@@ -174,7 +212,7 @@ export class LeadsService {
   }
 
   // Update lead details
-  async updateLead(id: string, dto: UpdateLeadDto) {
+  async updateLead(id: string, dto: UpdateLeadDto, user: any) {
     const existingLead = await this.prisma.lead.findUnique({
       where: { id },
     });
@@ -205,7 +243,7 @@ export class LeadsService {
       }
     }
 
-    // LOST status requires a reason
+    // LOST status requires reason
     if (
       dto.status === "LOST" &&
       (!dto.lostReason || dto.lostReason.trim() === "")
@@ -220,17 +258,18 @@ export class LeadsService {
       where: { id },
       data: {
         ...dto,
-        counselorId: dto.counselorId ?? null,
+        counselorId: dto.counselorId ?? existingLead.counselorId,
       },
     });
 
-    //  Log status change
+    // Log status change
     if (dto.status && dto.status !== existingLead.status) {
       await this.prisma.leadActivity.create({
         data: {
           type: "STATUS_CHANGE",
           message: `Status changed from ${existingLead.status} to ${dto.status}`,
           leadId: id,
+          userId: user.id,
         },
       });
     }
@@ -241,6 +280,7 @@ export class LeadsService {
         type: "EDIT",
         message: "Lead details updated",
         leadId: id,
+        userId: user.id,
       },
     });
 
@@ -330,23 +370,56 @@ export class LeadsService {
     const lead = await this.prisma.lead.findUnique({
       where: { id: leadId },
     });
+
     if (!lead) {
       throw new NotFoundException("Lead not found");
     }
 
-    return this.prisma.leadActivity.create({
+    // Outcomes that REQUIRE a follow-up
+    const followUpRequiredOutcomes = [
+      "SCHEDULE_CALLBACK",
+      "NO_ANSWER",
+      "VOICEMAIL",
+    ];
+
+    if (followUpRequiredOutcomes.includes(dto.outcome) && !dto.followUpDate) {
+      throw new BadRequestException(
+        "Follow-up date is required for this call outcome",
+      );
+    }
+
+    // Convert follow-up date if provided
+    const followUpDate = dto.followUpDate ? new Date(dto.followUpDate) : null;
+
+    // Log call activity
+    await this.prisma.leadActivity.create({
       data: {
         type: "CALL",
-        message: `call logged - ${dto.outcome}`,
+        message: `Call logged - ${dto.outcome}`,
         leadId,
         meta: {
           outcome: dto.outcome,
           notes: dto.notes ?? null,
           duration: dto.duration ?? null,
           rating: dto.rating ?? null,
+          followUpDate: followUpDate,
         },
       },
     });
+
+    // Update lead follow-up date only if provided
+    if (followUpDate) {
+      await this.prisma.lead.update({
+        where: { id: leadId },
+        data: {
+          followUpDate: followUpDate,
+        },
+      });
+    }
+
+    return {
+      message: "Call logged successfully",
+    };
   }
 
   // Mark a lead as LOST
@@ -359,11 +432,19 @@ export class LeadsService {
       throw new NotFoundException("Lead not found");
     }
 
+    // Prevent marking an already lost lead again
     if (lead.status === "LOST") {
       throw new BadRequestException("Lead is already marked as LOST");
     }
 
-    // Update lead status
+    // Ensure lost reason is provided before marking lead as lost
+    if (!dto.lostReason || dto.lostReason.trim() === "") {
+      throw new BadRequestException(
+        "Lost reason is required before marking a lead as LOST",
+      );
+    }
+
+    // Update lead status to LOST and store the reason
     const updatedLead = await this.prisma.lead.update({
       where: { id },
       data: {
@@ -372,7 +453,7 @@ export class LeadsService {
       },
     });
 
-    // Log lost activity
+    // Log activity for status change
     await this.prisma.leadActivity.create({
       data: {
         type: "STATUS_CHANGE",
@@ -389,7 +470,7 @@ export class LeadsService {
           leadId: id,
         },
       });
-
+      // Log activity for note addition
       await this.prisma.leadActivity.create({
         data: {
           type: "NOTE",
@@ -429,5 +510,81 @@ export class LeadsService {
     });
 
     return note;
+  }
+
+  // Send email to lead using template
+  async sendTemplateEmail(leadId: string, templateId: string) {
+    // Fetch the lead
+    const lead = await this.prisma.lead.findUnique({
+      where: { id: leadId },
+    });
+
+    if (!lead) {
+      throw new NotFoundException("Lead not found");
+    }
+
+    // Ensure the lead has an email address
+    if (!lead.email) {
+      throw new BadRequestException("Lead email not available");
+    }
+
+    // Fetch email template
+    const template = await this.prisma.emailTemplate.findUnique({
+      where: { id: templateId },
+    });
+
+    if (!template) {
+      throw new NotFoundException("Email template not found");
+    }
+
+    // Replace template variables
+    const personalizedMessage = template.content.replace(
+      "{{name}}",
+      lead.fullName ?? "Student",
+    );
+
+    // Create email transporter
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    // Send email
+    await transporter.sendMail({
+      from: `"Abroad Scholars" <${process.env.EMAIL_USER}>`,
+      to: lead.email,
+      subject: template.subject,
+      html: personalizedMessage,
+
+      attachments: [
+        {
+          filename: "Abroad-Scholar-Brochure.pdf",
+          path: path.join(
+            process.cwd(),
+            "assets/brochures/abroad-scholar-brochure.pdf",
+          ),
+        },
+      ],
+    });
+
+    // Log email activity in lead timeline
+    await this.prisma.leadActivity.create({
+      data: {
+        leadId: lead.id,
+        type: "EMAIL",
+        message: `Email sent using template: ${template.name}`,
+        meta: {
+          templateId: template.id,
+          subject: template.subject,
+        },
+      },
+    });
+
+    return {
+      message: "Email sent successfully",
+    };
   }
 }
