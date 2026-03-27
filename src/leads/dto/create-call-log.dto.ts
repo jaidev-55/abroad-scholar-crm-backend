@@ -42,10 +42,11 @@ export class CreateCallLogDto {
   rating?: number;
 
   // Next follow-up date for this lead
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: "2026-03-15T10:00:00.000Z",
     description: "Next follow-up date for this lead",
   })
+  @IsOptional()
   @IsDateString()
-  followUpDate!: string;
+  followUpDate?: string;
 }

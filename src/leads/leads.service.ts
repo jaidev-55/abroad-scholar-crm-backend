@@ -221,18 +221,6 @@ export class LeadsService {
       throw new NotFoundException("Lead not found");
     }
 
-    // RBAC: Counselors can only edit their own leads
-    if (user.role === "COUNSELOR" && existingLead.counselorId !== user.id) {
-      throw new BadRequestException(
-        "You can only update leads assigned to you",
-      );
-    }
-
-    // RBAC: Only ADMIN can change counselor assignment
-    if (dto.counselorId && user.role !== "ADMIN") {
-      throw new BadRequestException("Only admins can reassign counselors");
-    }
-
     // Ensure phone number is unique
     if (dto.phone && dto.phone !== existingLead.phone) {
       const phoneExists = await this.prisma.lead.findUnique({
@@ -387,12 +375,21 @@ export class LeadsService {
       throw new NotFoundException("Lead not found");
     }
 
-    //  Ensure follow-up date exists
-    if (!dto.followUpDate) {
+    // Outcomes that REQUIRE a follow-up
+    const followUpRequiredOutcomes = [
+      "SCHEDULE_CALLBACK",
+      "NO_ANSWER",
+      "VOICEMAIL",
+    ];
+
+    if (followUpRequiredOutcomes.includes(dto.outcome) && !dto.followUpDate) {
       throw new BadRequestException(
-        "Follow-up date is required when logging a call",
+        "Follow-up date is required for this call outcome",
       );
     }
+
+    // Convert follow-up date if provided
+    const followUpDate = dto.followUpDate ? new Date(dto.followUpDate) : null;
 
     // Log call activity
     await this.prisma.leadActivity.create({
@@ -405,18 +402,20 @@ export class LeadsService {
           notes: dto.notes ?? null,
           duration: dto.duration ?? null,
           rating: dto.rating ?? null,
-          followUpDate: dto.followUpDate,
+          followUpDate: followUpDate,
         },
       },
     });
 
-    // Update lead follow-up date
-    await this.prisma.lead.update({
-      where: { id: leadId },
-      data: {
-        followUpDate: new Date(dto.followUpDate),
-      },
-    });
+    // Update lead follow-up date only if provided
+    if (followUpDate) {
+      await this.prisma.lead.update({
+        where: { id: leadId },
+        data: {
+          followUpDate: followUpDate,
+        },
+      });
+    }
 
     return {
       message: "Call logged successfully",
