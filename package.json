@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev src/index.ts",
-    "build": "nest build",
+    "build": "npx nest build",
     "start": "node dist/main",
     "start:dev": "nest start --watch",
     "prisma:generate": "prisma generate",
@@ -47,6 +47,7 @@
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
+    "@nestjs/cli": "^11.0.16",
     "@types/bcrypt": "^6.0.0",
     "@types/multer": "^2.0.0",
     "@types/nodemailer": "^7.0.11",
