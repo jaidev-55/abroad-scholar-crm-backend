@@ -14,7 +14,7 @@ async function bootstrap() {
     }),
   );
 
-  // Swagger Configuration
+  // Swagger Configuration.
   const config = new DocumentBuilder()
     .setTitle("Aboard Scholar CRM API")
     .setDescription("CRM backend API documentation")
