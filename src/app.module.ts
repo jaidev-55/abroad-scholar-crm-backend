@@ -4,6 +4,7 @@ import { AuthModule } from "./auth/auth.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { LeadsModule } from "./leads/leads.module";
 import { EmailTemplatesModule } from "./email-templates/email-templates.module";
+import { EmailModule } from "./email/email.module";
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { EmailTemplatesModule } from "./email-templates/email-templates.module";
     AuthModule,
     LeadsModule,
     EmailTemplatesModule,
+    EmailModule,
   ],
 })
 export class AppModule {}

@@ -16,8 +16,8 @@ import { LostReason } from "@prisma/client";
 export class LeadsService {
   constructor(private prisma: PrismaService) {}
   // Create a new lead
-  async create(dto: CreateLeadDto) {
-    // Prevent duplicate leads by phone number
+  async create(dto: CreateLeadDto, user: any) {
+    // Prevent duplicate leads
     const existing = await this.prisma.lead.findUnique({
       where: { phone: dto.phone },
     });
@@ -26,46 +26,45 @@ export class LeadsService {
       throw new BadRequestException("Lead with this phone already exists");
     }
 
-    // Prevent creating a lead directly with LOST status
-    if (dto.status === "LOST") {
-      throw new BadRequestException("Lead cannot be created directly as LOST");
-    }
+    let assignedCounselorId: string;
 
-    // Get all counselors for round-robin assignment
-    const counselors = await this.prisma.user.findMany({
-      where: { role: "COUNSELOR" },
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (counselors.length === 0) {
-      throw new BadRequestException("No counselors available for assignment");
-    }
-
-    // Find the last assigned lead
-    const lastLead = await this.prisma.lead.findFirst({
-      where: { counselorId: { not: null } },
-      orderBy: { createdAt: "desc" },
-    });
-
-    let nextCounselorId: string;
-
-    if (!lastLead) {
-      // First lead -> assign first counselor
-      nextCounselorId = counselors[0].id;
+    //  CASE 1: Counselor creates → assign to self
+    if (user.role === "COUNSELOR") {
+      assignedCounselorId = user.id;
     } else {
-      const lastIndex = counselors.findIndex(
-        (c) => c.id === lastLead.counselorId,
-      );
+      //  CASE 2: Admin creates → round-robin or manual
 
-      // If previous counselor not found -> restart rotation
-      const nextIndex =
-        lastIndex === -1 ? 0 : (lastIndex + 1) % counselors.length;
+      const counselors = await this.prisma.user.findMany({
+        where: { role: "COUNSELOR" },
+        orderBy: { createdAt: "asc" },
+      });
 
-      nextCounselorId = counselors[nextIndex].id;
+      if (counselors.length === 0) {
+        throw new BadRequestException("No counselors available for assignment");
+      }
+
+      const lastLead = await this.prisma.lead.findFirst({
+        where: { counselorId: { not: null } },
+        orderBy: { createdAt: "desc" },
+      });
+
+      let nextCounselorId: string;
+
+      if (!lastLead) {
+        nextCounselorId = counselors[0].id;
+      } else {
+        const lastIndex = counselors.findIndex(
+          (c) => c.id === lastLead.counselorId,
+        );
+
+        const nextIndex =
+          lastIndex === -1 ? 0 : (lastIndex + 1) % counselors.length;
+
+        nextCounselorId = counselors[nextIndex].id;
+      }
+
+      assignedCounselorId = dto.counselorId ?? nextCounselorId;
     }
-
-    // Final counselor assignment (manual override allowed)
-    const assignedCounselorId = dto.counselorId ?? nextCounselorId;
 
     // Create lead
     const newLead = await this.prisma.lead.create({
@@ -80,7 +79,6 @@ export class LeadsService {
         followUpDate: dto.followUpDate ? new Date(dto.followUpDate) : undefined,
         counselorId: assignedCounselorId,
         status: dto.status ?? "NEW",
-        lostReason: dto.lostReason ? (dto.lostReason as LostReason) : undefined,
       },
     });
 
@@ -90,9 +88,64 @@ export class LeadsService {
         type: "EDIT",
         message: "Lead created and assigned to counselor",
         leadId: newLead.id,
-        userId: assignedCounselorId,
+        userId: user.id,
       },
     });
+
+    //  Send email
+    const counselor = await this.prisma.user.findUnique({
+      where: { id: assignedCounselorId },
+    });
+
+    if (counselor?.email) {
+      const leadUrl = `${process.env.FRONTEND_URL}/admin/leads/${newLead.id}`;
+
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
+        },
+      });
+
+      await transporter.sendMail({
+        from: `"Abroad Scholars CRM" <${process.env.EMAIL_USER}>`,
+        to: counselor.email,
+        subject: "🎯 New Lead Assigned to You",
+        html: `
+        <h2>New Lead Assigned</h2>
+
+        <p><b>Name:</b> ${newLead.fullName}</p>
+        <p><b>Phone:</b> ${newLead.phone}</p>
+        <p><b>Country:</b> ${newLead.country}</p>
+        <p><b>Priority:</b> ${newLead.priority}</p>
+        <p><b>Follow-up:</b> ${
+          newLead.followUpDate
+            ? new Date(newLead.followUpDate).toDateString()
+            : "Not scheduled"
+        }</p>
+
+        <br/>
+
+        <a href="${leadUrl}" 
+          style="
+            display:inline-block;
+            padding:10px 16px;
+            background-color:#4CAF50;
+            color:white;
+            text-decoration:none;
+            border-radius:6px;
+            font-weight:bold;
+          ">
+          👉 View Lead
+        </a>
+
+        <p style="margin-top:10px;">
+          Please follow up as soon as possible.
+        </p>
+      `,
+      });
+    }
 
     return newLead;
   }

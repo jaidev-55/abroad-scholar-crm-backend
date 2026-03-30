@@ -48,10 +48,10 @@ export class LeadsController {
   @ApiOperation({ summary: "Create new lead" })
   @ApiResponse({ status: 201, description: "Lead created successfully" })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles("ADMIN")
+  @Roles("ADMIN", "COUNSELOR")
   @Post()
-  create(@Body() dto: CreateLeadDto) {
-    return this.leadsService.create(dto);
+  create(@Body() dto: CreateLeadDto, @Req() req: any) {
+    return this.leadsService.create(dto, req.user);
   }
 
   // Add note to a lead
