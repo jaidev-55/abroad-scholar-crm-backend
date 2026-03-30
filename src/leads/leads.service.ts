@@ -11,13 +11,17 @@ import { ActivityType } from "@prisma/client";
 import * as nodemailer from "nodemailer";
 import * as path from "path";
 import { LostReason } from "@prisma/client";
+import { EmailService } from "../email/email.service";
 
 @Injectable()
 export class LeadsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
   // Create a new lead
   async create(dto: CreateLeadDto, user: any) {
-    // Prevent duplicate leads
+    //  Prevent duplicate
     const existing = await this.prisma.lead.findUnique({
       where: { phone: dto.phone },
     });
@@ -28,11 +32,12 @@ export class LeadsService {
 
     let assignedCounselorId: string;
 
-    //  CASE 1: Counselor creates → assign to self
+    // CASE 1: Counselor creates
     if (user.role === "COUNSELOR") {
-      assignedCounselorId = user.id;
+      // allow assign OR self
+      assignedCounselorId = dto.counselorId ?? user.id;
     } else {
-      //  CASE 2: Admin creates → round-robin or manual
+      //  CASE 2: Admin creates
 
       const counselors = await this.prisma.user.findMany({
         where: { role: "COUNSELOR" },
@@ -40,7 +45,7 @@ export class LeadsService {
       });
 
       if (counselors.length === 0) {
-        throw new BadRequestException("No counselors available for assignment");
+        throw new BadRequestException("No counselors available");
       }
 
       const lastLead = await this.prisma.lead.findFirst({
@@ -66,7 +71,16 @@ export class LeadsService {
       assignedCounselorId = dto.counselorId ?? nextCounselorId;
     }
 
-    // Create lead
+    // Validate counselorId
+    const counselorExists = await this.prisma.user.findUnique({
+      where: { id: assignedCounselorId },
+    });
+
+    if (!counselorExists) {
+      throw new BadRequestException("Invalid counselor ID");
+    }
+
+    //  Create lead
     const newLead = await this.prisma.lead.create({
       data: {
         fullName: dto.fullName,
@@ -82,7 +96,7 @@ export class LeadsService {
       },
     });
 
-    // Log activity
+    // Activity log
     await this.prisma.leadActivity.create({
       data: {
         type: "EDIT",
@@ -92,60 +106,17 @@ export class LeadsService {
       },
     });
 
-    //  Send email
-    const counselor = await this.prisma.user.findUnique({
-      where: { id: assignedCounselorId },
+    //  Fetch users
+    const counselor = counselorExists;
+
+    const admins = await this.prisma.user.findMany({
+      where: { role: "ADMIN" },
     });
 
-    if (counselor?.email) {
-      const leadUrl = `${process.env.FRONTEND_URL}/admin/leads/${newLead.id}`;
+    // Send emails (clean way)
+    await this.emailService.sendLeadAssignedToCounselor(counselor, newLead);
 
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
-      });
-
-      await transporter.sendMail({
-        from: `"Abroad Scholars CRM" <${process.env.EMAIL_USER}>`,
-        to: counselor.email,
-        subject: "🎯 New Lead Assigned to You",
-        html: `
-        <h2>New Lead Assigned</h2>
-
-        <p><b>Name:</b> ${newLead.fullName}</p>
-        <p><b>Phone:</b> ${newLead.phone}</p>
-        <p><b>Country:</b> ${newLead.country}</p>
-        <p><b>Priority:</b> ${newLead.priority}</p>
-        <p><b>Follow-up:</b> ${
-          newLead.followUpDate
-            ? new Date(newLead.followUpDate).toDateString()
-            : "Not scheduled"
-        }</p>
-
-        <br/>
-
-        <a href="${leadUrl}" 
-          style="
-            display:inline-block;
-            padding:10px 16px;
-            background-color:#4CAF50;
-            color:white;
-            text-decoration:none;
-            border-radius:6px;
-            font-weight:bold;
-          ">
-          👉 View Lead
-        </a>
-
-        <p style="margin-top:10px;">
-          Please follow up as soon as possible.
-        </p>
-      `,
-      });
-    }
+    await this.emailService.sendLeadCreatedToAdmins(admins, newLead);
 
     return newLead;
   }
