@@ -21,7 +21,7 @@ export class LeadsService {
   ) {}
   // Create a new lead
   async create(dto: CreateLeadDto, user: any) {
-    //  Prevent duplicate
+    // 1. Prevent duplicate
     const existing = await this.prisma.lead.findUnique({
       where: { phone: dto.phone },
     });
@@ -32,13 +32,10 @@ export class LeadsService {
 
     let assignedCounselorId: string;
 
-    // CASE 1: Counselor creates
+    // 2. Assign counselor
     if (user.role === "COUNSELOR") {
-      // allow assign OR self
       assignedCounselorId = dto.counselorId ?? user.id;
     } else {
-      //  CASE 2: Admin creates
-
       const counselors = await this.prisma.user.findMany({
         where: { role: "COUNSELOR" },
         orderBy: { createdAt: "asc" },
@@ -71,7 +68,7 @@ export class LeadsService {
       assignedCounselorId = dto.counselorId ?? nextCounselorId;
     }
 
-    // Validate counselorId
+    // 3. Validate counselor
     const counselorExists = await this.prisma.user.findUnique({
       where: { id: assignedCounselorId },
     });
@@ -80,7 +77,7 @@ export class LeadsService {
       throw new BadRequestException("Invalid counselor ID");
     }
 
-    //  Create lead
+    // 4. Create lead
     const newLead = await this.prisma.lead.create({
       data: {
         fullName: dto.fullName,
@@ -96,7 +93,7 @@ export class LeadsService {
       },
     });
 
-    // Activity log
+    // 5. Activity log (KEEP awaited)
     await this.prisma.leadActivity.create({
       data: {
         type: "EDIT",
@@ -106,17 +103,20 @@ export class LeadsService {
       },
     });
 
-    //  Fetch users
-    const counselor = counselorExists;
+    // 6. Prepare email data
+    const counselor = counselorExists!; // ✅ safe (already checked)
 
     const admins = await this.prisma.user.findMany({
       where: { role: "ADMIN" },
     });
 
-    // Send emails (clean way)
-    await this.emailService.sendLeadAssignedToCounselor(counselor, newLead);
-
-    await this.emailService.sendLeadCreatedToAdmins(admins, newLead);
+    // 7. NON-BLOCKING EMAILS
+    Promise.all([
+      this.emailService.sendLeadAssignedToCounselor(counselor, newLead),
+      this.emailService.sendLeadCreatedToAdmins(admins, newLead),
+    ]).catch((err) => {
+      console.error("Email error:", err);
+    });
 
     return newLead;
   }
