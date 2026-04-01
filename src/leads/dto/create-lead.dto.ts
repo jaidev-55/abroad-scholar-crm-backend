@@ -4,8 +4,10 @@ import {
   IsEnum,
   IsDateString,
   IsNumber,
+  IsArray,
 } from "class-validator";
-import { LeadSource, LeadPriority } from "@prisma/client";
+import { Type } from "class-transformer";
+import { LeadSource, LeadPriority, LeadStatus } from "@prisma/client";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class CreateLeadDto {
@@ -30,10 +32,10 @@ export class CreateLeadDto {
   @IsEnum(LeadSource)
   source!: LeadSource;
 
-  @ApiPropertyOptional({ enum: ["NEW", "IN_PROGRESS", "CONVERTED", "LOST"] })
+  @ApiPropertyOptional({ enum: LeadStatus })
   @IsOptional()
-  @IsEnum(["NEW", "IN_PROGRESS", "CONVERTED", "LOST"])
-  status?: "NEW" | "IN_PROGRESS" | "CONVERTED" | "LOST";
+  @IsEnum(LeadStatus)
+  status?: LeadStatus;
 
   @ApiPropertyOptional({ enum: LeadPriority })
   @IsOptional()
@@ -45,13 +47,23 @@ export class CreateLeadDto {
   @IsString()
   counselorId?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ example: 6.5 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   ieltsScore?: number;
 
-  @ApiPropertyOptional({ example: "2026-03-05T10:00:00Z" })
+  @ApiPropertyOptional({ example: "2026-04-01" })
   @IsOptional()
   @IsDateString()
   followUpDate?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    example: ["Interested in UK", "Needs scholarship"],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  notes?: string[];
 }

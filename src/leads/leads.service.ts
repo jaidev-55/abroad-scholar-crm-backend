@@ -93,6 +93,26 @@ export class LeadsService {
       },
     });
 
+    // 5. SAVE NOTES
+    if (dto.notes && dto.notes.length > 0) {
+      await this.prisma.leadNote.createMany({
+        data: dto.notes.map((note) => ({
+          content: note,
+          leadId: newLead.id,
+        })),
+      });
+
+      // Optional: log activity
+      await this.prisma.leadActivity.create({
+        data: {
+          type: "NOTE",
+          message: `${dto.notes.length} note(s) added during lead creation`,
+          leadId: newLead.id,
+          userId: user.id,
+        },
+      });
+    }
+
     // 5. Activity log (KEEP awaited)
     await this.prisma.leadActivity.create({
       data: {
@@ -248,13 +268,14 @@ export class LeadsService {
   async updateLead(id: string, dto: UpdateLeadDto, user: any) {
     const existingLead = await this.prisma.lead.findUnique({
       where: { id },
+      include: { notes: true }, 
     });
 
     if (!existingLead) {
       throw new NotFoundException("Lead not found");
     }
 
-    // Ensure phone number is unique
+    // 1. Ensure phone number is unique
     if (dto.phone && dto.phone !== existingLead.phone) {
       const phoneExists = await this.prisma.lead.findUnique({
         where: { phone: dto.phone },
@@ -265,7 +286,7 @@ export class LeadsService {
       }
     }
 
-    // Validate counselor assignment
+    // 2. Validate counselor assignment
     if (dto.counselorId) {
       const counselor = await this.prisma.user.findUnique({
         where: { id: dto.counselorId },
@@ -276,7 +297,7 @@ export class LeadsService {
       }
     }
 
-    // LOST status requires reason
+    // 3. LOST status requires reason
     if (
       dto.status === "LOST" &&
       (!dto.lostReason || dto.lostReason.trim() === "")
@@ -286,16 +307,56 @@ export class LeadsService {
       );
     }
 
-    // Update lead
+    // 4. Update lead fields (exclude notes)
+    const { notes, ...leadData } = dto;
+
     const updatedLead = await this.prisma.lead.update({
       where: { id },
       data: {
-        ...dto,
+        ...leadData,
         lostReason: dto.lostReason ? (dto.lostReason as LostReason) : undefined,
       },
     });
 
-    // Log status change
+    // 5. HANDLE NOTES (ADD + UPDATE)
+    if (notes && notes.length > 0) {
+      const cleanedNotes = notes
+        .map((n) => ({
+          id: n.id,
+          content: n.content.trim(),
+        }))
+        .filter((n) => n.content.length > 0);
+
+      for (const note of cleanedNotes) {
+        if (note.id) {
+          // UPDATE existing note
+          await this.prisma.leadNote.update({
+            where: { id: note.id },
+            data: { content: note.content },
+          });
+        } else {
+          // CREATE new note
+          await this.prisma.leadNote.create({
+            data: {
+              content: note.content,
+              leadId: id,
+            },
+          });
+        }
+      }
+
+      // Activity log for notes
+      await this.prisma.leadActivity.create({
+        data: {
+          type: "NOTE",
+          message: "Notes updated",
+          leadId: id,
+          userId: user.id,
+        },
+      });
+    }
+
+    // 6. Log status change
     if (dto.status && dto.status !== existingLead.status) {
       await this.prisma.leadActivity.create({
         data: {
@@ -307,7 +368,7 @@ export class LeadsService {
       });
     }
 
-    // Log edit activity
+    // 7. Log edit activity
     await this.prisma.leadActivity.create({
       data: {
         type: "EDIT",
