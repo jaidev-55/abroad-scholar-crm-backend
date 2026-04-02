@@ -11,11 +11,11 @@ import { AppController } from "./app.controller";
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
-    AppController,
     AuthModule,
     LeadsModule,
     EmailTemplatesModule,
     EmailModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}
