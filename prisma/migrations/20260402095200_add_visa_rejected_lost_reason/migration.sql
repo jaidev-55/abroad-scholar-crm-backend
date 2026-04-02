@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "LostReason" ADD VALUE 'VISA_REJECTED';

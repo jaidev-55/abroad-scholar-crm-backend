@@ -1,14 +1,19 @@
-import { IsString, IsOptional, IsNotEmpty } from "class-validator";
+import { IsString, IsOptional, IsNotEmpty, IsEnum } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { LostReason } from "@prisma/client";
 
 export class MarkLostDto {
-  // main reason why the lead was lost
-  @ApiProperty({ example: "Student chose another consultant" })
-  @IsString()
+  @ApiProperty({
+    example: "CHOSE_OTHER_CONSULTANT",
+    enum: LostReason,
+    description: "Must be a valid LostReason enum value",
+  })
+  @IsEnum(LostReason, {
+    message: `lostReason must be one of: ${Object.values(LostReason).join(", ")}`,
+  })
   @IsNotEmpty({ message: "Lost reason is required" })
-  lostReason!: string;
+  lostReason!: LostReason;
 
-  // optional additional details about why the lead was lost
   @ApiPropertyOptional({
     example: "Said fees were lower elsewhere",
   })
