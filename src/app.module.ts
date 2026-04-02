@@ -5,11 +5,13 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { LeadsModule } from "./leads/leads.module";
 import { EmailTemplatesModule } from "./email-templates/email-templates.module";
 import { EmailModule } from "./email/email.module";
+import { AppController } from "./app.controller";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    AppController,
     AuthModule,
     LeadsModule,
     EmailTemplatesModule,
