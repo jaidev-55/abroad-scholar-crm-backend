@@ -467,7 +467,7 @@ export class LeadsService {
     });
   }
 
-  // Log a call activity for a lead
+  // Log a call activity for a lead.
   async logCall(leadId: string, dto: CreateCallLogDto) {
     const lead = await this.prisma.lead.findUnique({
       where: { id: leadId },
