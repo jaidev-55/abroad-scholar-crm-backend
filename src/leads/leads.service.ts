@@ -308,13 +308,14 @@ export class LeadsService {
     }
 
     // 4. Update lead fields (exclude notes)
-    const { notes, ...leadData } = dto;
+    const { notes, followUpDate, lostReason, ...leadData } = dto;
 
     const updatedLead = await this.prisma.lead.update({
       where: { id },
       data: {
         ...leadData,
-        lostReason: dto.lostReason ? (dto.lostReason as LostReason) : undefined,
+        followUpDate: followUpDate ? new Date(followUpDate) : undefined,
+        lostReason: lostReason ? (lostReason as LostReason) : undefined,
       },
     });
 
@@ -329,11 +330,25 @@ export class LeadsService {
 
       for (const note of cleanedNotes) {
         if (note.id) {
-          // UPDATE existing note
-          await this.prisma.leadNote.update({
+          // Check if note exists before updating
+          const existingNote = await this.prisma.leadNote.findUnique({
             where: { id: note.id },
-            data: { content: note.content },
           });
+
+          if (existingNote) {
+            await this.prisma.leadNote.update({
+              where: { id: note.id },
+              data: { content: note.content },
+            });
+          } else {
+            // Note ID doesn't exist — create as new note instead
+            await this.prisma.leadNote.create({
+              data: {
+                content: note.content,
+                leadId: id,
+              },
+            });
+          }
         } else {
           // CREATE new note
           await this.prisma.leadNote.create({
