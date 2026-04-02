@@ -268,7 +268,7 @@ export class LeadsService {
   async updateLead(id: string, dto: UpdateLeadDto, user: any) {
     const existingLead = await this.prisma.lead.findUnique({
       where: { id },
-      include: { notes: true }, 
+      include: { notes: true },
     });
 
     if (!existingLead) {
@@ -443,18 +443,26 @@ export class LeadsService {
 
     const where: any = { leadId };
 
-    // Filter by activity type
     if (type) {
       where.type = type;
     }
 
-    // Search in activity messages
     if (search) {
       where.OR = [{ message: { contains: search, mode: "insensitive" } }];
     }
 
     return this.prisma.leadActivity.findMany({
       where,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
   }
