@@ -244,6 +244,10 @@ export class AuthService {
   }
   // Update own profile — any logged-in user (name + email only, role NEVER changes)
   async updateProfile(userId: string, dto: { name?: string; email?: string }) {
+    if (!userId) {
+      throw new BadRequestException("User ID is required");
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
