@@ -162,6 +162,14 @@ export class LeadsController {
     return this.leadsService.logCall(id, dto);
   }
 
+  // GET /leads/:id/call-logs → call history + summary stats
+  @Get(":id/call-logs")
+  @ApiOperation({ summary: "Get call log history for a lead" })
+  getCallLogs(@Param("id") id: string) {
+    return this.leadsService.getCallLogs(id);
+  }
+
+  // POST /leads/:id/send-template-email → send email to lead using a saved template
   @Post(":id/send-template-email")
   @ApiOperation({ summary: "Send email using template" })
   sendTemplateEmail(
