@@ -538,6 +538,71 @@ export class LeadsService {
       message: "Call logged successfully",
     };
   }
+  // Fetch call log history for a lead with summary stats
+  async getCallLogs(leadId: string) {
+    const lead = await this.prisma.lead.findUnique({
+      where: { id: leadId },
+    });
+
+    if (!lead) {
+      throw new NotFoundException("Lead not found");
+    }
+
+    // Fetch all CALL activities for this lead
+    const callActivities = await this.prisma.leadActivity.findMany({
+      where: {
+        leadId,
+        type: "CALL",
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, role: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    //  Compute summary stats
+    const totalCalls = callActivities.length;
+
+    // Average duration in seconds (only from calls that have duration)
+    const callsWithDuration = callActivities.filter(
+      (a) => (a.meta as any)?.duration,
+    );
+
+    const avgDurationSeconds =
+      callsWithDuration.length > 0
+        ? Math.round(
+            callsWithDuration.reduce(
+              (sum, a) => sum + ((a.meta as any).duration as number),
+              0,
+            ) / callsWithDuration.length,
+          )
+        : 0;
+
+    // Conversions = calls with outcome CONVERTED
+    const conversions = callActivities.filter(
+      (a) => (a.meta as any)?.outcome === "CONVERTED",
+    ).length;
+
+    const outcomeCounts: Record<string, number> = {};
+    for (const activity of callActivities) {
+      const outcome = (activity.meta as any)?.outcome;
+      if (outcome) {
+        outcomeCounts[outcome] = (outcomeCounts[outcome] ?? 0) + 1;
+      }
+    }
+
+    return {
+      summary: {
+        totalCalls,
+        avgDurationSeconds,
+        conversions,
+        outcomeCounts,
+      },
+      calls: callActivities,
+    };
+  }
 
   // Mark a lead as LOST
   async markAsLost(id: string, dto: any) {
