@@ -483,7 +483,7 @@ export class LeadsService {
   }
 
   // Log a call activity for a lead.
-  async logCall(leadId: string, dto: CreateCallLogDto) {
+  async logCall(leadId: string, dto: CreateCallLogDto, user: any) {
     const lead = await this.prisma.lead.findUnique({
       where: { id: leadId },
     });
@@ -492,7 +492,6 @@ export class LeadsService {
       throw new NotFoundException("Lead not found");
     }
 
-    // Outcomes that REQUIRE a follow-up
     const followUpRequiredOutcomes = [
       "SCHEDULE_CALLBACK",
       "NO_ANSWER",
@@ -505,15 +504,14 @@ export class LeadsService {
       );
     }
 
-    // Convert follow-up date if provided
     const followUpDate = dto.followUpDate ? new Date(dto.followUpDate) : null;
 
-    // Log call activity
     await this.prisma.leadActivity.create({
       data: {
         type: "CALL",
         message: `Call logged - ${dto.outcome}`,
         leadId,
+        userId: user.id,
         meta: {
           outcome: dto.outcome,
           notes: dto.notes ?? null,
@@ -524,19 +522,14 @@ export class LeadsService {
       },
     });
 
-    // Update lead follow-up date only if provided
     if (followUpDate) {
       await this.prisma.lead.update({
         where: { id: leadId },
-        data: {
-          followUpDate: followUpDate,
-        },
+        data: { followUpDate },
       });
     }
 
-    return {
-      message: "Call logged successfully",
-    };
+    return { message: "Call logged successfully" };
   }
   // Fetch call log history for a lead with summary stats
   async getCallLogs(leadId: string) {

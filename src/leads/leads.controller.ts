@@ -157,9 +157,14 @@ export class LeadsController {
 
   // Log a call activity manually
   @Post(":id/call")
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Log call activity" })
-  logCall(@Param("id") id: string, @Body() dto: CreateCallLogDto) {
-    return this.leadsService.logCall(id, dto);
+  logCall(
+    @Param("id") id: string,
+    @Body() dto: CreateCallLogDto,
+    @Req() req: Request,
+  ) {
+    return this.leadsService.logCall(id, dto, req.user);
   }
 
   // GET /leads/:id/call-logs → call history + summary stats
