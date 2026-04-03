@@ -1,30 +1,31 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsEmail, IsOptional, IsEnum, IsString } from "class-validator";
-
-export enum UserRole {
-  ADMIN = "ADMIN",
-  COUNSELOR = "COUNSELOR",
-}
+import {
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MinLength,
+} from "class-validator";
+import { UserRole } from "@prisma/client";
 
 export class UpdateUserDto {
-  // User full name
-  @ApiPropertyOptional({ example: "Jai" })
+  @ApiPropertyOptional({ example: "John Doe" })
   @IsOptional()
   @IsString()
+  @MinLength(2)
   name?: string;
 
-  // User email address
-  @ApiPropertyOptional({ example: "Jai@gmail.com" })
+  @ApiPropertyOptional({ example: "john@example.com" })
   @IsOptional()
-  @IsEmail()
+  @IsEmail({}, { message: "Enter a valid email" })
   email?: string;
 
-  // Role of the user (ADMIN or COUNSELOR)
   @ApiPropertyOptional({
-    example: "COUNSELOR",
     enum: UserRole,
+    example: "COUNSELOR",
+    description: "Only admins can change roles",
   })
   @IsOptional()
-  @IsEnum(UserRole)
+  @IsEnum(UserRole, { message: "Role must be ADMIN or COUNSELOR" })
   role?: UserRole;
 }

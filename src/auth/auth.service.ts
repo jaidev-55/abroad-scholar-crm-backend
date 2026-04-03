@@ -242,15 +242,62 @@ export class AuthService {
       },
     });
   }
-  // update user Details
+  // Update own profile — any logged-in user (name + email only, role NEVER changes)
+  async updateProfile(userId: string, dto: { name?: string; email?: string }) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) throw new NotFoundException("User not found");
+
+    if (dto.email && dto.email !== user.email) {
+      const emailExists = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+      });
+      if (emailExists) throw new BadRequestException("Email already in use");
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: dto.name ?? user.name,
+        email: dto.email ?? user.email,
+      },
+    });
+
+    return {
+      message: "Profile updated successfully",
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+      },
+    };
+  }
+
+  // Update any user — Admin only (name, email AND role)
   async updateUser(id: string, dto: any) {
     const user = await this.prisma.user.findUnique({
       where: { id },
     });
 
-    if (!user) {
-      throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException("User not found");
+
+    if (dto.email && dto.email !== user.email) {
+      const emailExists = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+      });
+      if (emailExists) throw new BadRequestException("Email already in use");
     }
+
+    const validRoles = ["ADMIN", "COUNSELOR"];
+    if (dto.role && !validRoles.includes(dto.role)) {
+      throw new BadRequestException(
+        `Invalid role. Must be one of: ${validRoles.join(", ")}`,
+      );
+    }
+
     const updatedUser = await this.prisma.user.update({
       where: { id },
       data: {
@@ -262,8 +309,40 @@ export class AuthService {
 
     return {
       message: "User updated successfully",
-      user: updatedUser,
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+      },
     };
+  }
+
+  // Change password for authenticated user (no OTP needed)
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) throw new NotFoundException("User not found");
+
+    // Verify current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch)
+      throw new UnauthorizedException("Current password is incorrect");
+
+    // Hash and save new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+
+    return { message: "Password changed successfully" };
   }
   // Delete existing user
   async deleteUser(id: string) {

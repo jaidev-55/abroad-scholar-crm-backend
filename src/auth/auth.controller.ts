@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service";
@@ -27,9 +28,10 @@ import { VerifyOtpDto } from "./dto/verify-otp.dto";
 import { ResendOtpDto } from "./dto/resend-otp.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
-import { Req } from "@nestjs/common";
 import { Request } from "express";
 import { UserRole } from "@prisma/client";
+import { ChangePasswordDto } from "./dto/change-password.dto";
+import { UpdateProfileDto } from "./dto/update-profile.dto";
 
 @ApiBearerAuth()
 @Controller("auth")
@@ -82,14 +84,37 @@ export class AuthController {
     return this.authService.getUsers(role as UserRole);
   }
 
-  // Update user
+  // Self-update — any logged-in user (name + email only, role never changes)
+  @Patch("profile")
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "Update own profile (name & email only)" })
+  updateProfile(@Req() req: Request, @Body() dto: UpdateProfileDto) {
+    return this.authService.updateProfile(
+      (req.user as { sub: string }).sub,
+      dto,
+    );
+  }
+
+  // Admin-only — can update any user including their role
   @Patch("user/:id")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN")
-  @ApiOperation({ summary: "Update user (Admin only)" })
+  @ApiOperation({ summary: "Update any user (Admin only — can change role)" })
   @ApiParam({ name: "id", description: "User ID" })
   updateUser(@Param("id") id: string, @Body() dto: UpdateUserDto) {
     return this.authService.updateUser(id, dto);
+  }
+
+  // update password
+  @Patch("change-password")
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "Change password for logged-in user" })
+  changePassword(@Req() req: Request, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(
+      (req.user as { sub: string }).sub,
+      dto.currentPassword,
+      dto.newPassword,
+    );
   }
 
   // Delete user
