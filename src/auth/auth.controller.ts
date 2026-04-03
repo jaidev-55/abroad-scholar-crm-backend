@@ -61,9 +61,9 @@ export class AuthController {
   // Get logged-in user profile
   @Get("me")
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: "Get current logged-in user" })
   getCurrentUser(@Req() req: Request) {
-    return req.user;
+    const userId = (req.user as { sub: string }).sub;
+    return this.authService.getMe(userId);
   }
 
   // List Users
