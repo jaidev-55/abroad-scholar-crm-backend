@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -6,12 +7,18 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
-import { ApiBearerAuth, ApiOperation, ApiParam } from "@nestjs/swagger";
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+} from "@nestjs/swagger";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
@@ -22,6 +29,7 @@ import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { Req } from "@nestjs/common";
 import { Request } from "express";
+import { UserRole } from "@prisma/client";
 
 @ApiBearerAuth()
 @Controller("auth")
@@ -56,13 +64,22 @@ export class AuthController {
     return req.user;
   }
 
-  //List Users
+  // List Users
   @Get("users")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles("ADMIN")
-  @ApiOperation({ summary: "Get all users (Admin only)" })
-  getUsers() {
-    return this.authService.getUsers();
+  @Roles("ADMIN", "COUNSELOR")
+  @ApiOperation({ summary: "Get users " })
+  @ApiQuery({
+    name: "role",
+    required: false,
+    enum: UserRole,
+  })
+  getUsers(@Query("role") role?: string) {
+    if (role && !Object.values(UserRole).includes(role as UserRole)) {
+      throw new BadRequestException("Invalid role");
+    }
+
+    return this.authService.getUsers(role as UserRole);
   }
 
   // Update user

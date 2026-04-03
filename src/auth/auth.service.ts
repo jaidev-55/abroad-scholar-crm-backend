@@ -8,6 +8,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
+import { UserRole } from "@prisma/client";
 import { RegisterDto } from "./dto/register.dto";
 import * as nodemailer from "nodemailer";
 import { generateOtp } from "../utils/generate-otp";
@@ -226,8 +227,9 @@ export class AuthService {
     };
   }
   // show User List
-  async getUsers() {
+  async getUsers(role?: UserRole) {
     return this.prisma.user.findMany({
+      where: role ? { role } : undefined,
       select: {
         id: true,
         name: true,

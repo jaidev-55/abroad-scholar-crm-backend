@@ -5,10 +5,17 @@ import {
   IsDateString,
   IsNumber,
   IsArray,
+  ValidateIf,
+  IsNotEmpty,
 } from "class-validator";
 import { Type } from "class-transformer";
 import { LeadSource, LeadPriority, LeadStatus } from "@prisma/client";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+
+export enum AssignmentType {
+  AUTO = "AUTO",
+  MANUAL = "MANUAL",
+}
 
 export class CreateLeadDto {
   @ApiProperty({ example: "Aarav Mehta" })
@@ -42,8 +49,14 @@ export class CreateLeadDto {
   @IsEnum(LeadPriority)
   priority?: LeadPriority;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: AssignmentType, default: AssignmentType.AUTO })
   @IsOptional()
+  @IsEnum(AssignmentType)
+  assignmentType?: AssignmentType;
+
+  @ApiPropertyOptional()
+  @ValidateIf((o) => o.assignmentType === AssignmentType.MANUAL)
+  @IsNotEmpty({ message: "Counselor is required for manual assignment" })
   @IsString()
   counselorId?: string;
 

@@ -32,40 +32,60 @@ export class LeadsService {
 
     let assignedCounselorId: string;
 
-    // 2. Assign counselor
+    //  Default assignment type
+    const assignmentType = dto.assignmentType ?? "AUTO";
+
+    // CASE 1: Counselor creating lead
     if (user.role === "COUNSELOR") {
-      assignedCounselorId = dto.counselorId ?? user.id;
-    } else {
-      const counselors = await this.prisma.user.findMany({
-        where: { role: "COUNSELOR" },
-        orderBy: { createdAt: "asc" },
-      });
+      assignedCounselorId = user.id;
+    }
 
-      if (counselors.length === 0) {
-        throw new BadRequestException("No counselors available");
+    // CASE 2: ADMIN / others
+    else {
+      // MANUAL ASSIGNMENT
+      if (assignmentType === "MANUAL") {
+        if (!dto.counselorId) {
+          throw new BadRequestException(
+            "Counselor is required for manual assignment",
+          );
+        }
+
+        assignedCounselorId = dto.counselorId;
       }
 
-      const lastLead = await this.prisma.lead.findFirst({
-        where: { counselorId: { not: null } },
-        orderBy: { createdAt: "desc" },
-      });
+      // AUTO (ROUND ROBIN)
+      else {
+        const counselors = await this.prisma.user.findMany({
+          where: { role: "COUNSELOR" },
+          orderBy: { createdAt: "asc" },
+        });
 
-      let nextCounselorId: string;
+        if (counselors.length === 0) {
+          throw new BadRequestException("No counselors available");
+        }
 
-      if (!lastLead) {
-        nextCounselorId = counselors[0].id;
-      } else {
-        const lastIndex = counselors.findIndex(
-          (c) => c.id === lastLead.counselorId,
-        );
+        const lastLead = await this.prisma.lead.findFirst({
+          where: { counselorId: { not: null } },
+          orderBy: { createdAt: "desc" },
+        });
 
-        const nextIndex =
-          lastIndex === -1 ? 0 : (lastIndex + 1) % counselors.length;
+        let nextCounselorId: string;
 
-        nextCounselorId = counselors[nextIndex].id;
+        if (!lastLead) {
+          nextCounselorId = counselors[0].id;
+        } else {
+          const lastIndex = counselors.findIndex(
+            (c) => c.id === lastLead.counselorId,
+          );
+
+          const nextIndex =
+            lastIndex === -1 ? 0 : (lastIndex + 1) % counselors.length;
+
+          nextCounselorId = counselors[nextIndex].id;
+        }
+
+        assignedCounselorId = nextCounselorId;
       }
-
-      assignedCounselorId = dto.counselorId ?? nextCounselorId;
     }
 
     // 3. Validate counselor
@@ -286,7 +306,9 @@ export class LeadsService {
       }
     }
 
-    // 2. Validate counselor assignment
+    // 2. Handle manual counselor assignment
+    let assignedCounselorId = existingLead.counselorId;
+
     if (dto.counselorId) {
       const counselor = await this.prisma.user.findUnique({
         where: { id: dto.counselorId },
@@ -295,6 +317,8 @@ export class LeadsService {
       if (!counselor) {
         throw new BadRequestException("Invalid counselor ID");
       }
+
+      assignedCounselorId = dto.counselorId;
     }
 
     // 3. LOST status requires reason
@@ -314,6 +338,7 @@ export class LeadsService {
       where: { id },
       data: {
         ...leadData,
+        counselorId: assignedCounselorId,
         followUpDate: followUpDate ? new Date(followUpDate) : undefined,
         lostReason: lostReason ? (lostReason as LostReason) : undefined,
       },
@@ -359,14 +384,20 @@ export class LeadsService {
           });
         }
       }
+    }
 
-      // Activity log for notes
+    // Activity log for notes
+    if (dto.counselorId && dto.counselorId !== existingLead.counselorId) {
       await this.prisma.leadActivity.create({
         data: {
-          type: "NOTE",
-          message: "Notes updated",
+          type: "EDIT",
+          message: "Counselor reassigned",
           leadId: id,
           userId: user.id,
+          meta: {
+            from: existingLead.counselorId,
+            to: dto.counselorId,
+          },
         },
       });
     }
