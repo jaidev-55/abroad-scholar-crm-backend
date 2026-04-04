@@ -176,5 +176,17 @@ model EmailTemplate {
 }
 
 
+// Webhook configuration for Meta/Google ad forms
+model WebhookConfig {
+id String @id @default(uuid())
+platform String 
+formId String @unique
+formName String
+isActive Boolean @default(true)
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+}
+
+
 
 

@@ -6,6 +6,7 @@ import { LeadsModule } from "./leads/leads.module";
 import { EmailTemplatesModule } from "./email-templates/email-templates.module";
 import { EmailModule } from "./email/email.module";
 import { AppController } from "./app.controller";
+import { WebhooksModule } from "./webhooks/webhooks.module";
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { AppController } from "./app.controller";
     LeadsModule,
     EmailTemplatesModule,
     EmailModule,
+    WebhooksModule,
   ],
   controllers: [AppController],
 })
