@@ -793,4 +793,62 @@ export class LeadsService {
       message: "Email sent successfully",
     };
   }
+
+  // Send custom email to lead (without template)
+  async sendCustomEmail(
+    leadId: string,
+    dto: { subject: string; message: string },
+    user: any,
+    attachment?: Express.Multer.File,
+  ) {
+    const lead = await this.prisma.lead.findUnique({
+      where: { id: leadId },
+    });
+    if (!lead) {
+      throw new BadRequestException("Lead not found");
+    }
+
+    if (!lead.email) {
+      throw new BadRequestException("lead email not available");
+    }
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    const mailOptions: any = {
+      from: `"Abroad Scholars" <${process.env.EMAIL_USER}>`,
+      to: lead.email,
+      subject: dto.subject,
+      html: dto.message,
+    };
+
+    if (attachment) {
+      mailOptions.attachments = [
+        {
+          filename: attachment.originalname,
+          content: attachment.buffer,
+        },
+      ];
+    }
+
+    await transporter.sendMail(mailOptions);
+
+    await this.prisma.leadActivity.create({
+      data: {
+        leadId: lead.id,
+        type: "EMAIL",
+        message: `Custom email sent: ${dto.subject}`,
+        userId: user.id,
+        meta: {
+          subject: dto.subject,
+        },
+      },
+    });
+    return { message: "Email sent successfully" };
+  }
 }
