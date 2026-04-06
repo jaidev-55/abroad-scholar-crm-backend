@@ -764,14 +764,21 @@ export class LeadsService {
       subject: template.subject,
       html: personalizedMessage,
 
-      attachments: template.attachment
-        ? [
-            {
-              filename: template.attachment,
-              path: path.join(process.cwd(), "uploads", template.attachment),
-            },
-          ]
-        : [],
+      attachments: (() => {
+        if (!template.attachment) return [];
+        const filePath = path.join(
+          process.cwd(),
+          "uploads",
+          template.attachment,
+        );
+        try {
+          const fs = require("fs");
+          if (fs.existsSync(filePath)) {
+            return [{ filename: template.attachment, path: filePath }];
+          }
+        } catch {}
+        return [];
+      })(),
     });
 
     // Log email activity in lead timeline
