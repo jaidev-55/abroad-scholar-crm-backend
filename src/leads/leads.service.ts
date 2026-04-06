@@ -765,15 +765,14 @@ export class LeadsService {
       subject: template.subject,
       html: personalizedMessage,
 
-      attachments: [
-        {
-          filename: "Abroad-Scholar-Brochure.pdf",
-          path: path.join(
-            process.cwd(),
-            "assets/brochures/abroad-scholar-brochure.pdf",
-          ),
-        },
-      ],
+      attachments: template.attachment
+        ? [
+            {
+              filename: template.attachment,
+              path: path.join(process.cwd(), "uploads", template.attachment),
+            },
+          ]
+        : [],
     });
 
     // Log email activity in lead timeline
