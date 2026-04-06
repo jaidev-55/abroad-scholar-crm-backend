@@ -33,6 +33,7 @@ import { MarkLostDto } from "./dto/mark-lost.dto";
 import { ActivityType } from "@prisma/client";
 import { SendTemplateEmailDto } from "./dto/send-template-email.dto";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { SendCustomEmailDto } from "./dto/send-custom-email.dto";
 
 @ApiTags("Leads")
 @ApiBearerAuth()
@@ -187,13 +188,14 @@ export class LeadsController {
     return this.leadsService.sendTemplateEmail(leadId, dto.templateId);
   }
 
-  // POST email without Templates
+  // POST /leads/:id/send-email
   @Post(":id/send-email")
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor("attachment"))
+  @ApiOperation({ summary: "Send custom email to lead" })
   async sendCustomEmail(
     @Param("id") id: string,
-    @Body() dto: { subject: string; message: string },
+    @Body() dto: SendCustomEmailDto,
     @Req() req: Request,
     @UploadedFile() attachment?: Express.Multer.File,
   ) {
