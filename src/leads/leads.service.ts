@@ -744,10 +744,9 @@ export class LeadsService {
     }
 
     // Replace template variables
-    const personalizedMessage = template.content.replace(
-      "{{name}}",
-      lead.fullName ?? "Student",
-    );
+    const personalizedMessage = template.content
+      .replace(/\{\{name\}\}/g, lead.fullName ?? "Student")
+      .replace(/\n/g, "<br>");
 
     // Create email transporter
     const transporter = nodemailer.createTransport({
@@ -823,7 +822,7 @@ export class LeadsService {
       from: `"Abroad Scholars" <${process.env.EMAIL_USER}>`,
       to: lead.email,
       subject: dto.subject,
-      html: dto.message,
+      html: dto.message.replace(/\n/g, "<br>"),
     };
 
     if (attachment) {
