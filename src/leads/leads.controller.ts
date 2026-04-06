@@ -9,6 +9,7 @@ import {
   ParseEnumPipe,
   UseInterceptors,
   UploadedFile,
+  BadRequestException,
 } from "@nestjs/common";
 import { LeadsService } from "./leads.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
@@ -25,6 +26,8 @@ import {
   ApiParam,
   ApiQuery,
   ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
 } from "@nestjs/swagger";
 import { UpdateLeadDto } from "./dto/update-lead.dto";
 import { CreateNoteDto } from "./dto/create-note.dto";
@@ -191,8 +194,35 @@ export class LeadsController {
   // POST /leads/:id/send-email
   @Post(":id/send-email")
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor("attachment"))
+  @UseInterceptors(
+    FileInterceptor("attachment", {
+      limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (file.mimetype !== "application/pdf") {
+          cb(new BadRequestException("Only PDF files are allowed"), false);
+        } else {
+          cb(null, true);
+        }
+      },
+    }),
+  )
+  @ApiConsumes("multipart/form-data")
   @ApiOperation({ summary: "Send custom email to lead" })
+  @ApiBody({
+    schema: {
+      type: "object",
+      required: ["subject", "message"],
+      properties: {
+        subject: { type: "string", example: "Follow-up on your application" },
+        message: { type: "string", example: "Hi John, just checking in..." },
+        attachment: {
+          type: "string",
+          format: "binary",
+          description: "PDF only, max 10MB",
+        },
+      },
+    },
+  })
   async sendCustomEmail(
     @Param("id") id: string,
     @Body() dto: SendCustomEmailDto,
