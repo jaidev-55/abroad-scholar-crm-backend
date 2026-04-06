@@ -37,7 +37,7 @@ export class EmailService {
   ) {
     if (!counselor?.email) return;
 
-    const leadUrl = `${process.env.FRONTEND_URL}/admin/leads/${lead.id}`;
+    const leadUrl = `https://crm.abroadscholars.in/admin/leads-pipeline?leadId=${lead.id}`;
 
     const html = `
   <div style="font-family: Arial, sans-serif; background:#f4f6f8; padding:20px;">
@@ -83,7 +83,7 @@ export class EmailService {
     admins: { email?: string; name?: string }[],
     lead: any,
   ) {
-    const leadUrl = `${process.env.FRONTEND_URL}/admin/leads/${lead.id}`;
+    const leadUrl = `https://crm.abroadscholars.in/admin/leads-pipeline?leadId=${lead.id}`;
 
     const validAdmins = admins.filter((a) => a.email);
 

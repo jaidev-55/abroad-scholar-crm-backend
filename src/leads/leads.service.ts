@@ -144,7 +144,7 @@ export class LeadsService {
     });
 
     // 6. Prepare email data
-    const counselor = counselorExists!; // ✅ safe (already checked)
+    const counselor = counselorExists!;
 
     const admins = await this.prisma.user.findMany({
       where: { role: "ADMIN" },
