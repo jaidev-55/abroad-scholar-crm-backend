@@ -12,6 +12,7 @@ import * as nodemailer from "nodemailer";
 import * as path from "path";
 import { LostReason } from "@prisma/client";
 import { EmailService } from "../email/email.service";
+import { error } from "console";
 
 @Injectable()
 export class LeadsService {
@@ -428,6 +429,40 @@ export class LeadsService {
     });
 
     return updatedLead;
+  }
+
+  // Delete single Lead details
+  async deleteLead(id: string) {
+    const lead = await this.prisma.lead.findUnique({
+      where: { id },
+    });
+
+    if (!lead) {
+      throw new NotFoundException("Lead not found");
+    }
+
+    await this.prisma.lead.delete({
+      where: { id },
+    });
+    return { message: "Lead deleted successfully" };
+  }
+
+  // Delete multiple Lead details
+  async deleteMultiple(ids: string[]) {
+    if (!ids || ids.length === 0) {
+      throw new BadRequestException("No IDs provided");
+    }
+
+    const result = await this.prisma.lead.deleteMany({
+      where: {
+        id: {
+          in: ids,
+        },
+      },
+    });
+    return {
+      message: `${result.count} leads deleted successfully`,
+    };
   }
 
   // Dashboard statistics

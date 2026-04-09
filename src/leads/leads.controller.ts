@@ -10,6 +10,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Delete,
 } from "@nestjs/common";
 import { LeadsService } from "./leads.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
@@ -230,5 +231,17 @@ export class LeadsController {
     @UploadedFile() attachment?: Express.Multer.File,
   ) {
     return this.leadsService.sendCustomEmail(id, dto, req.user, attachment);
+  }
+
+  // Delete single Leads
+  @Delete(":id")
+  deleteLead(@Param("id") id: string) {
+    return this.leadsService.deleteLead(id);
+  }
+
+  // Delete multiple Leads
+  @Post("delete-multiple")
+  deleteMultiple(@Body("ids") ids: string[]) {
+    return this.leadsService.deleteMultiple(ids);
   }
 }
