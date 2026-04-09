@@ -83,7 +83,7 @@ model Lead {
   fullName   String
   phone      String  @unique
   email      String?
-  country    String
+  country    String?
   ieltsScore Float?
 
   // Classification Details

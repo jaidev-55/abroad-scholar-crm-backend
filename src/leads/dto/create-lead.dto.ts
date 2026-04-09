@@ -31,9 +31,10 @@ export class CreateLeadDto {
   @IsString()
   email?: string;
 
-  @ApiProperty({ example: "UK" })
+  @ApiPropertyOptional({ example: "UK" })
+  @IsOptional()
   @IsString()
-  country!: string;
+  country?: string;
 
   @ApiProperty({ enum: LeadSource })
   @IsEnum(LeadSource)
