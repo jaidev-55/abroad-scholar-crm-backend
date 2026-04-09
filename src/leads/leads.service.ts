@@ -447,21 +447,29 @@ export class LeadsService {
     return { message: "Lead deleted successfully" };
   }
 
-  // Delete multiple Lead details
   async deleteMultiple(ids: string[]) {
     if (!ids || ids.length === 0) {
       throw new BadRequestException("No IDs provided");
     }
 
-    const result = await this.prisma.lead.deleteMany({
-      where: {
-        id: {
-          in: ids,
-        },
-      },
+    // Verify all leads exist before deleting
+    const found = await this.prisma.lead.findMany({
+      where: { id: { in: ids } },
+      select: { id: true },
     });
+
+    if (found.length !== ids.length) {
+      const foundIds = found.map((l) => l.id);
+      const missing = ids.filter((id) => !foundIds.includes(id));
+      throw new NotFoundException(`Leads not found: ${missing.join(", ")}`);
+    }
+
+    const result = await this.prisma.lead.deleteMany({
+      where: { id: { in: ids } },
+    });
+
     return {
-      message: `${result.count} leads deleted successfully`,
+      message: `${result.count} lead(s) deleted successfully`,
     };
   }
 

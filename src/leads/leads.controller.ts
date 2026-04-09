@@ -38,6 +38,7 @@ import { ActivityType } from "@prisma/client";
 import { SendTemplateEmailDto } from "./dto/send-template-email.dto";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { SendCustomEmailDto } from "./dto/send-custom-email.dto";
+import { DeleteMultipleLeadsDto } from "./dto/delete-multiple.dto";
 
 @ApiTags("Leads")
 @ApiBearerAuth()
@@ -233,15 +234,21 @@ export class LeadsController {
     return this.leadsService.sendCustomEmail(id, dto, req.user, attachment);
   }
 
-  // Delete single Leads
+  // Delete single lead
   @Delete(":id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("ADMIN")
+  @ApiOperation({ summary: "Delete a single lead" })
+  @ApiParam({ name: "id", description: "Lead ID" })
   deleteLead(@Param("id") id: string) {
     return this.leadsService.deleteLead(id);
   }
-
   // Delete multiple Leads
-  @Post("delete-multiple")
-  deleteMultiple(@Body("ids") ids: string[]) {
-    return this.leadsService.deleteMultiple(ids);
+  @Post("bulk-delete")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("ADMIN")
+  @ApiOperation({ summary: "Delete multiple leads by IDs" })
+  deleteMultiple(@Body() dto: DeleteMultipleLeadsDto) {
+    return this.leadsService.deleteMultiple(dto.ids);
   }
 }
