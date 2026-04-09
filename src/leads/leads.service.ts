@@ -259,9 +259,12 @@ export class LeadsService {
 
     return {
       data,
-      total,
-      page: Number(page),
-      limit: Number(limit),
+      meta: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)),
+      },
     };
   }
 
