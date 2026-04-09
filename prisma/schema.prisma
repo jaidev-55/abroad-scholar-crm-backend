@@ -126,7 +126,7 @@ model LeadActivity {
   message   String
   meta      Json?
   leadId    String
-  lead      Lead         @relation(fields: [leadId], references: [id])
+  lead      Lead         @relation(fields: [leadId], references: [id],onDelete: Cascade)
   userId    String?
   user      User?        @relation(fields: [userId], references: [id])
   createdAt DateTime     @default(now())
