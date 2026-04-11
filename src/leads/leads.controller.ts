@@ -35,7 +35,6 @@ import { CreateNoteDto } from "./dto/create-note.dto";
 import { CreateCallLogDto } from "./dto/create-call-log.dto";
 import { MarkLostDto } from "./dto/mark-lost.dto";
 import { ActivityType } from "@prisma/client";
-import { SendTemplateEmailDto } from "./dto/send-template-email.dto";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { SendCustomEmailDto } from "./dto/send-custom-email.dto";
 import { DeleteMultipleLeadsDto } from "./dto/delete-multiple.dto";

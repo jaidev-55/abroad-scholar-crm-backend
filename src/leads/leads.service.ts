@@ -854,15 +854,17 @@ export class LeadsService {
     if (!lead) throw new BadRequestException("Lead not found");
     if (!lead.email) throw new BadRequestException("Lead email not available");
 
-    // Fetch counselor's actual email from DB
-    const senderUser = await this.prisma.user.findUnique({
-      where: { id: user.id },
-      select: { email: true, name: true },
-    });
+    let fromEmail = process.env.EMAIL_USER as string;
+    let fromName = "Abroad Scholars";
 
-    //  Use counselor email if available, fallback to system email
-    const fromEmail = senderUser?.email ?? process.env.EMAIL_USER;
-    const fromName = senderUser?.name ?? "Abroad Scholars";
+    if (user?.id) {
+      const senderUser = await this.prisma.user.findUnique({
+        where: { id: user.id },
+        select: { email: true, name: true },
+      });
+      if (senderUser?.email) fromEmail = senderUser.email;
+      if (senderUser?.name) fromName = senderUser.name;
+    }
 
     const transporter = nodemailer.createTransport({
       service: "gmail",
@@ -893,7 +895,7 @@ export class LeadsService {
         leadId: lead.id,
         type: "EMAIL",
         message: `Custom email sent: ${dto.subject}`,
-        userId: user.id,
+        userId: user?.id ?? null,
         meta: {
           subject: dto.subject,
           sentFrom: fromEmail,
