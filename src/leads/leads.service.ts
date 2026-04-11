@@ -852,16 +852,19 @@ export class LeadsService {
     user: any,
     attachment?: Express.Multer.File,
   ) {
-    const lead = await this.prisma.lead.findUnique({
-      where: { id: leadId },
-    });
-    if (!lead) {
-      throw new BadRequestException("Lead not found");
-    }
+    const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
+    if (!lead) throw new BadRequestException("Lead not found");
+    if (!lead.email) throw new BadRequestException("Lead email not available");
 
-    if (!lead.email) {
-      throw new BadRequestException("lead email not available");
-    }
+    // Fetch counselor's actual email from DB
+    const senderUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { email: true, name: true },
+    });
+
+    //  Use counselor email if available, fallback to system email
+    const fromEmail = senderUser?.email ?? process.env.EMAIL_USER;
+    const fromName = senderUser?.name ?? "Abroad Scholars";
 
     const transporter = nodemailer.createTransport({
       service: "gmail",
@@ -872,7 +875,8 @@ export class LeadsService {
     });
 
     const mailOptions: any = {
-      from: `"Abroad Scholars" <${process.env.EMAIL_USER}>`,
+      from: `"${fromName}" <${fromEmail}>`,
+      replyTo: fromEmail,
       to: lead.email,
       subject: dto.subject,
       html: dto.message.replace(/\n/g, "<br>"),
@@ -880,10 +884,7 @@ export class LeadsService {
 
     if (attachment) {
       mailOptions.attachments = [
-        {
-          filename: attachment.originalname,
-          content: attachment.buffer,
-        },
+        { filename: attachment.originalname, content: attachment.buffer },
       ];
     }
 
@@ -897,9 +898,11 @@ export class LeadsService {
         userId: user.id,
         meta: {
           subject: dto.subject,
+          sentFrom: fromEmail,
         },
       },
     });
+
     return { message: "Email sent successfully" };
   }
 }
