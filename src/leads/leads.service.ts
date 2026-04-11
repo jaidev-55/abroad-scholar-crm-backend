@@ -808,15 +808,20 @@ export class LeadsService {
         if (!template.attachment) return [];
         const filePath = path.join(
           process.cwd(),
-          "uploads",
+          "assets",
+          "brochures",
           template.attachment,
         );
         try {
           const fs = require("fs");
           if (fs.existsSync(filePath)) {
             return [{ filename: template.attachment, path: filePath }];
+          } else {
+            console.warn("Attachment file not found:", filePath);
           }
-        } catch {}
+        } catch (e) {
+          console.error("Attachment error:", e);
+        }
         return [];
       })(),
     });
