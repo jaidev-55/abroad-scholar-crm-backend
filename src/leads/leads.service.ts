@@ -775,16 +775,17 @@ export class LeadsService {
     });
     if (!template) throw new NotFoundException("Email template not found");
 
-    // Fetch counselor's email from DB
-    const senderUser = user
-      ? await this.prisma.user.findUnique({
-          where: { id: user.id },
-          select: { email: true, name: true },
-        })
-      : null;
+    let fromEmail = process.env.EMAIL_USER as string;
+    let fromName = "Abroad Scholars";
 
-    const fromEmail = senderUser?.email ?? process.env.EMAIL_USER;
-    const fromName = senderUser?.name ?? "Abroad Scholars";
+    if (user?.id) {
+      const senderUser = await this.prisma.user.findUnique({
+        where: { id: user.id },
+        select: { email: true, name: true },
+      });
+      if (senderUser?.email) fromEmail = senderUser.email;
+      if (senderUser?.name) fromName = senderUser.name;
+    }
 
     const personalizedMessage = template.content
       .replace(/\{\{name\}\}/g, lead.fullName ?? "Student")
@@ -817,7 +818,7 @@ export class LeadsService {
           if (fs.existsSync(filePath)) {
             return [{ filename: template.attachment, path: filePath }];
           } else {
-            console.warn("Attachment file not found:", filePath);
+            console.warn("Attachment not found:", filePath);
           }
         } catch (e) {
           console.error("Attachment error:", e);
