@@ -183,14 +183,15 @@ export class LeadsController {
     return this.leadsService.getCallLogs(id);
   }
 
-  // POST /leads/:id/send-template-email → send email to lead using a saved template
+  // POST /leads/:id/send-template-email  send email to lead using a saved template
   @Post(":id/send-template-email")
-  @ApiOperation({ summary: "Send email using template" })
-  sendTemplateEmail(
-    @Param("id") leadId: string,
-    @Body() dto: SendTemplateEmailDto,
+  @UseGuards(JwtAuthGuard)
+  async sendTemplateEmail(
+    @Param("id") id: string,
+    @Body("templateId") templateId: string,
+    @Req() req: Request,
   ) {
-    return this.leadsService.sendTemplateEmail(leadId, dto.templateId);
+    return this.leadsService.sendTemplateEmail(id, templateId, req.user);
   }
 
   // POST /leads/:id/send-email

@@ -765,36 +765,31 @@ export class LeadsService {
   }
 
   // Send email to lead using template
-  async sendTemplateEmail(leadId: string, templateId: string) {
-    // Fetch the lead
-    const lead = await this.prisma.lead.findUnique({
-      where: { id: leadId },
-    });
+  async sendTemplateEmail(leadId: string, templateId: string, user?: any) {
+    const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
+    if (!lead) throw new NotFoundException("Lead not found");
+    if (!lead.email) throw new BadRequestException("Lead email not available");
 
-    if (!lead) {
-      throw new NotFoundException("Lead not found");
-    }
-
-    // Ensure the lead has an email address
-    if (!lead.email) {
-      throw new BadRequestException("Lead email not available");
-    }
-
-    // Fetch email template
     const template = await this.prisma.emailTemplate.findUnique({
       where: { id: templateId },
     });
+    if (!template) throw new NotFoundException("Email template not found");
 
-    if (!template) {
-      throw new NotFoundException("Email template not found");
-    }
+    // Fetch counselor's email from DB
+    const senderUser = user
+      ? await this.prisma.user.findUnique({
+          where: { id: user.id },
+          select: { email: true, name: true },
+        })
+      : null;
 
-    // Replace template variables
+    const fromEmail = senderUser?.email ?? process.env.EMAIL_USER;
+    const fromName = senderUser?.name ?? "Abroad Scholars";
+
     const personalizedMessage = template.content
       .replace(/\{\{name\}\}/g, lead.fullName ?? "Student")
       .replace(/\n/g, "<br>");
 
-    // Create email transporter
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -803,13 +798,12 @@ export class LeadsService {
       },
     });
 
-    // Send email
     await transporter.sendMail({
-      from: `"Abroad Scholars" <${process.env.EMAIL_USER}>`,
+      from: `"${fromName}" <${fromEmail}>`,
+      replyTo: fromEmail,
       to: lead.email,
       subject: template.subject,
       html: personalizedMessage,
-
       attachments: (() => {
         if (!template.attachment) return [];
         const filePath = path.join(
@@ -827,22 +821,21 @@ export class LeadsService {
       })(),
     });
 
-    // Log email activity in lead timeline
     await this.prisma.leadActivity.create({
       data: {
         leadId: lead.id,
         type: "EMAIL",
         message: `Email sent using template: ${template.name}`,
+        userId: user?.id ?? null,
         meta: {
           templateId: template.id,
           subject: template.subject,
+          sentFrom: fromEmail,
         },
       },
     });
 
-    return {
-      message: "Email sent successfully",
-    };
+    return { message: "Email sent successfully" };
   }
 
   // Send custom email to lead (without template)
