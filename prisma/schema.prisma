@@ -46,6 +46,7 @@ enum LeadSource {
   GOOGLE_ADS
   META_ADS
   REFERRAL
+  GOOGLE_SHEET
 }
 
 // Priority level for counselor attention
