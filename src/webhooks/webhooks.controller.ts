@@ -60,21 +60,31 @@ export class WebhooksController {
     return this.webhooksService.getAllConfigs();
   }
 
-  // ─── ADD new form config (Admin only) ───
+  // ─── ADD new form config (auto-syncs past leads) ───
   @Post("config")
-  @ApiOperation({ summary: "Add a new ad form to CRM" })
+  @ApiOperation({
+    summary: "Add a new ad form to CRM (auto-imports past leads)",
+  })
   async addConfig(@Body() dto: CreateWebhookConfigDto) {
     return this.webhooksService.addConfig(dto);
   }
 
-  // ─── TOGGLE form active/inactive (Admin only) ───
+  // ─── MANUAL SYNC past leads from a form ───
+  @Post("config/:id/sync")
+  @ApiOperation({ summary: "Manually sync past leads from a form" })
+  async syncLeads(@Param("id") id: string) {
+    const config = await this.webhooksService.getConfigById(id);
+    return this.webhooksService.syncMetaLeads(config.formId);
+  }
+
+  // ─── TOGGLE form active/inactive ───
   @Patch("config/:id/toggle")
   @ApiOperation({ summary: "Enable or disable a form" })
   async toggleConfig(@Param("id") id: string) {
     return this.webhooksService.toggleConfig(id);
   }
 
-  // ─── DELETE form config (Admin only) ───
+  // ─── DELETE form config ───
   @Delete("config/:id")
   @ApiOperation({ summary: "Remove a form from CRM" })
   async deleteConfig(@Param("id") id: string) {

@@ -31,7 +31,7 @@ export class WebhooksService {
     return token === process.env.GOOGLE_WEBHOOK_SECRET;
   }
 
-  // ─── PROCESS META LEAD ───
+  // ─── PROCESS META LEAD (real-time webhook) ───
   async processMetaLead(body: any) {
     const activeConfigs = await this.prisma.webhookConfig.findMany({
       where: { platform: "META", isActive: true },
@@ -82,7 +82,7 @@ export class WebhooksService {
     return { success: true };
   }
 
-  // ─── FETCH LEAD DATA FROM META API ───
+  // ─── FETCH SINGLE LEAD DATA FROM META API ───
   private async fetchMetaLeadData(leadgenId: string) {
     try {
       const ACCESS_TOKEN = process.env.META_PAGE_ACCESS_TOKEN;
@@ -100,12 +100,76 @@ export class WebhooksService {
         fullName: getValue("full_name") ?? "Unknown",
         phone: getValue("phone_number"),
         email: getValue("email"),
-        country: getValue("country"),
+        country: getValue("city") ?? getValue("country") ?? "Unknown",
       };
     } catch (error) {
       this.logger.error("Meta API fetch error:", error);
       return null;
     }
+  }
+
+  // ─── SYNC HISTORICAL LEADS FROM META FORM ───
+  async syncMetaLeads(formId: string) {
+    const ACCESS_TOKEN = process.env.META_PAGE_ACCESS_TOKEN;
+    this.logger.log(`Starting sync for form: ${formId}`);
+
+    let synced = 0;
+    let skipped = 0;
+    let total = 0;
+    let nextUrl: string | null =
+      `https://graph.facebook.com/v19.0/${formId}/leads?access_token=${ACCESS_TOKEN}&limit=100`;
+
+    const formConfig = await this.prisma.webhookConfig.findUnique({
+      where: { formId },
+    });
+
+    // Paginate through all leads
+    while (nextUrl) {
+      const response: Response = await fetch(nextUrl);
+      const data: any = await response.json();
+
+      if (!data?.data?.length) break;
+
+      total += data.data.length;
+
+      for (const lead of data.data) {
+        const fields = lead.field_data ?? [];
+        const getValue = (name: string) =>
+          fields.find((f: any) => f.name === name)?.values?.[0] ?? null;
+
+        const phone = getValue("phone_number");
+        if (!phone) {
+          skipped++;
+          continue;
+        }
+
+        const result = await this.createLeadFromWebhook({
+          fullName: getValue("full_name") ?? "Unknown",
+          phone,
+          email: getValue("email"),
+          country: getValue("city") ?? getValue("country") ?? "Unknown",
+          source: "META_ADS",
+          meta: {
+            leadgenId: lead.id,
+            formId,
+            formName: formConfig?.formName ?? "Unknown",
+            createdAt: lead.created_time,
+            isHistorical: true,
+          },
+        });
+
+        if (result) synced++;
+        else skipped++;
+      }
+
+      nextUrl = data?.paging?.next ?? null;
+    }
+
+    this.logger.log(
+      `Sync complete for ${formId}: ${synced} synced, ${skipped} skipped (total: ${total})`,
+    );
+
+    return { synced, skipped, total };
   }
 
   // ─── PROCESS GOOGLE LEAD ───
@@ -132,7 +196,7 @@ export class WebhooksService {
   }
 
   // ─── CREATE LEAD + ROUND-ROBIN ASSIGN ───
-  private async createLeadFromWebhook(data: {
+  async createLeadFromWebhook(data: {
     fullName: string;
     phone: string;
     email?: string;
@@ -246,7 +310,16 @@ export class WebhooksService {
     });
   }
 
-  // Add new form configuration
+  // Get single config by ID
+  async getConfigById(id: string) {
+    const config = await this.prisma.webhookConfig.findUnique({
+      where: { id },
+    });
+    if (!config) throw new NotFoundException("Config not found");
+    return config;
+  }
+
+  // Add new form configuration + AUTO-SYNC past leads
   async addConfig(dto: CreateWebhookConfigDto) {
     const existing = await this.prisma.webhookConfig.findUnique({
       where: { formId: dto.formId },
@@ -256,7 +329,8 @@ export class WebhooksService {
       throw new BadRequestException("This form ID is already configured");
     }
 
-    return this.prisma.webhookConfig.create({
+    // 1. Save the form configuration
+    const config = await this.prisma.webhookConfig.create({
       data: {
         platform: dto.platform,
         formId: dto.formId,
@@ -264,6 +338,21 @@ export class WebhooksService {
         isActive: dto.isActive ?? true,
       },
     });
+
+    // 2. Auto-sync past leads in background (non-blocking)
+    if (dto.platform === "META") {
+      this.syncMetaLeads(dto.formId)
+        .then((result) => {
+          this.logger.log(
+            `Auto-sync complete for ${dto.formName}: ${result.synced} synced, ${result.skipped} skipped`,
+          );
+        })
+        .catch((err) => {
+          this.logger.error(`Auto-sync failed for ${dto.formName}:`, err);
+        });
+    }
+
+    return config;
   }
 
   // Toggle form active/inactive
