@@ -98,7 +98,7 @@ export class WebhooksService {
 
       return {
         fullName: getValue("full_name") ?? "Unknown",
-        phone: getValue("phone_number"),
+        phone: getValue("phone_number") ?? getValue("phone"),
         email: getValue("email"),
         country: getValue("city") ?? getValue("country") ?? "Unknown",
       };
@@ -156,6 +156,7 @@ export class WebhooksService {
             createdAt: lead.created_time,
             isHistorical: true,
           },
+          skipEmail: true,
         });
 
         if (result) synced++;
@@ -203,6 +204,7 @@ export class WebhooksService {
     country?: string;
     source: "META_ADS" | "GOOGLE_ADS";
     meta?: any;
+    skipEmail?: boolean;
   }) {
     if (!data.phone) {
       this.logger.warn(`Skipping lead without phone: ${data.fullName}`);
@@ -264,7 +266,8 @@ export class WebhooksService {
       where: { role: "ADMIN" },
     });
 
-    if (counselor) {
+    // Only send email if not bulk syncing
+    if (counselor && !data.skipEmail) {
       Promise.all([
         this.emailService.sendLeadAssignedToCounselor(counselor, newLead),
         this.emailService.sendLeadCreatedToAdmins(admins, newLead),
