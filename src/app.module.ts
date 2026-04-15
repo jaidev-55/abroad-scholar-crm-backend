@@ -17,8 +17,8 @@ import { DashboardModule } from "./dashboard/dashboard.module";
     LeadsModule,
     EmailTemplatesModule,
     DashboardModule,
+    
     EmailModule,
-
     WebhooksModule,
   ],
   controllers: [AppController],
