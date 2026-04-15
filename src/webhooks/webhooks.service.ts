@@ -137,14 +137,14 @@ export class WebhooksService {
         const getValue = (name: string) =>
           fields.find((f: any) => f.name === name)?.values?.[0] ?? null;
 
-        const phone = getValue("phone_number");
+        const phone = getValue("phone_number") ?? getValue("phone");
         if (!phone) {
           skipped++;
           continue;
         }
 
         const result = await this.createLeadFromWebhook({
-          fullName: getValue("full_name") ?? "Unknown",
+          fullName: getValue("full_name") ?? getValue("name") ?? "Unknown",
           phone,
           email: getValue("email"),
           country: getValue("city") ?? getValue("country") ?? "Unknown",
