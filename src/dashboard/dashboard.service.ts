@@ -14,15 +14,12 @@ export class DashboardService {
   async getStats(query: DashboardStatsQueryDto) {
     const { preset = "today", from, to, counselorId, source } = query;
 
-    //  Resolve current date range from preset or custom
     const { currentFrom, currentTo } = this.resolveDateRange(preset, from, to);
 
-    // Previous period: same duration shifted back
     const periodMs = currentTo.getTime() - currentFrom.getTime();
     const prevFrom = new Date(currentFrom.getTime() - periodMs);
     const prevTo = new Date(currentTo.getTime() - periodMs);
 
-    // Base where clause builders
     const baseWhere = (
       rangeFrom: Date,
       rangeTo: Date,
@@ -32,7 +29,6 @@ export class DashboardService {
       ...(source && { source: source as LeadSource }),
     });
 
-    // Follow-ups use a separate date field, not createdAt
     const followUpWhere = (dueBefore: Date): Prisma.LeadWhereInput => ({
       ...(counselorId && { counselorId }),
       ...(source && { source: source as LeadSource }),
@@ -40,7 +36,6 @@ export class DashboardService {
       status: { notIn: [LeadStatus.CONVERTED, LeadStatus.LOST] },
     });
 
-    //  Run all counts in parallel
     const [
       totalLeads,
       prevTotalLeads,
@@ -123,45 +118,28 @@ export class DashboardService {
     };
   }
 
-  //  Date range resolver
-
-  private resolveDateRange(
-    preset: DatePreset,
-    from?: string,
-    to?: string,
-  ): { currentFrom: Date; currentTo: Date } {
-    const now = new Date();
-
+  private resolveDateRange(preset: DatePreset, from?: string, to?: string) {
     if (preset === "custom") {
-      if (!from || !to) {
+      if (!from || !to)
         throw new BadRequestException(
           'from and to are required when preset is "custom"',
         );
-      }
       return {
         currentFrom: this.startOfDay(new Date(from)),
         currentTo: this.endOfDay(new Date(to)),
       };
     }
-
     const presetDays: Record<Exclude<DatePreset, "custom">, number> = {
       today: 0,
       "7days": 6,
       "30days": 29,
       "90days": 89,
     };
-
     const days = presetDays[preset as Exclude<DatePreset, "custom">] ?? 0;
     const currentFrom = this.startOfDay(new Date());
     currentFrom.setDate(currentFrom.getDate() - days);
-
-    return {
-      currentFrom,
-      currentTo: this.endOfDay(now),
-    };
+    return { currentFrom, currentTo: this.endOfDay(new Date()) };
   }
-
-  //  Helpers
 
   private pctChange(current: number, previous: number): number {
     if (previous === 0) return current > 0 ? 100 : 0;
@@ -173,7 +151,6 @@ export class DashboardService {
     d.setHours(0, 0, 0, 0);
     return d;
   }
-
   private endOfDay(date: Date): Date {
     const d = new Date(date);
     d.setHours(23, 59, 59, 999);
@@ -181,6 +158,9 @@ export class DashboardService {
   }
 }
 
+// Leads Trend
+
+@Injectable()
 export class LeadsTrendService {
   constructor(private readonly prisma: PrismaService) {}
 
@@ -196,24 +176,18 @@ export class LeadsTrendService {
 
     const { currentFrom, currentTo } = this.resolveDateRange(preset, from, to);
 
-    // Base filter (no date — we'll group by date in memory)
     const baseWhere: Prisma.LeadWhereInput = {
       createdAt: { gte: currentFrom, lte: currentTo },
       ...(counselorId && { counselorId }),
       ...(source && { source: source as LeadSource }),
     };
 
-    // Fetch all leads in range with only the fields we need
     const leads = await this.prisma.lead.findMany({
       where: baseWhere,
-      select: {
-        createdAt: true,
-        status: true,
-      },
+      select: { createdAt: true, status: true },
       orderBy: { createdAt: "asc" },
     });
 
-    // Build a map of date-label → { newLeads, converted }
     const buckets = this.buildBuckets(currentFrom, currentTo, groupBy);
 
     for (const lead of leads) {
@@ -243,71 +217,48 @@ export class LeadsTrendService {
     };
   }
 
-  // ─── Build empty buckets for every day/week in range ─────────────────────────
-
-  private buildBuckets(
-    from: Date,
-    to: Date,
-    groupBy: "day" | "week",
-  ): Record<string, { newLeads: number; converted: number }> {
+  private buildBuckets(from: Date, to: Date, groupBy: "day" | "week") {
     const buckets: Record<string, { newLeads: number; converted: number }> = {};
     const cursor = new Date(from);
-
     while (cursor <= to) {
       const label = this.getLabel(cursor, groupBy);
-      if (!buckets[label]) {
-        buckets[label] = { newLeads: 0, converted: 0 };
-      }
+      if (!buckets[label]) buckets[label] = { newLeads: 0, converted: 0 };
       cursor.setDate(cursor.getDate() + 1);
     }
-
     return buckets;
   }
 
-  // ─── Format date into bucket label ───────────────────────────────────────────
-
   private getLabel(date: Date, groupBy: "day" | "week"): string {
     if (groupBy === "week") {
-      // ISO week start (Monday)
       const d = new Date(date);
-      const day = d.getDay(); // 0=Sun
+      const day = d.getDay();
       const diff = d.getDate() - day + (day === 0 ? -6 : 1);
       d.setDate(diff);
-      return d.toISOString().slice(0, 10); // "2026-04-07"
+      return d.toISOString().slice(0, 10);
     }
-    return date.toISOString().slice(0, 10); // "2026-04-13"
+    return date.toISOString().slice(0, 10);
   }
 
-  // ─── Date range resolver (same pattern as stats) ──────────────────────────────
-
-  private resolveDateRange(
-    preset: string,
-    from?: string,
-    to?: string,
-  ): { currentFrom: Date; currentTo: Date } {
+  private resolveDateRange(preset: string, from?: string, to?: string) {
     if (preset === "custom") {
-      if (!from || !to) {
+      if (!from || !to)
         throw new BadRequestException(
           'from and to are required when preset is "custom"',
         );
-      }
       return {
         currentFrom: this.startOfDay(new Date(from)),
         currentTo: this.endOfDay(new Date(to)),
       };
     }
-
     const presetDays: Record<string, number> = {
       today: 0,
       "7days": 6,
       "30days": 29,
       "90days": 89,
     };
-
     const days = presetDays[preset] ?? 6;
     const currentFrom = this.startOfDay(new Date());
     currentFrom.setDate(currentFrom.getDate() - days);
-
     return { currentFrom, currentTo: this.endOfDay(new Date()) };
   }
 
@@ -316,7 +267,6 @@ export class LeadsTrendService {
     d.setHours(0, 0, 0, 0);
     return d;
   }
-
   private endOfDay(date: Date): Date {
     const d = new Date(date);
     d.setHours(23, 59, 59, 999);
