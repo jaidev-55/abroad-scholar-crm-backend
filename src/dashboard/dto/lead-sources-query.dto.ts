@@ -1,4 +1,11 @@
-import { IsOptional, IsIn, IsDateString, IsString } from "class-validator";
+import {
+  IsOptional,
+  IsIn,
+  IsDateString,
+  IsString,
+  IsEnum,
+} from "class-validator";
+import { LeadSource } from "@prisma/client";
 
 export class LeadSourcesQueryDto {
   @IsOptional()
@@ -16,4 +23,8 @@ export class LeadSourcesQueryDto {
   @IsOptional()
   @IsString()
   counselorId?: string;
+
+  @IsOptional()
+  @IsEnum(LeadSource)
+  source?: LeadSource;
 }

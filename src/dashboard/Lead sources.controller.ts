@@ -7,8 +7,8 @@ import {
   ApiResponse,
 } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
-import { LeadSourcesService } from "./Lead sources.service";
 import { LeadSourcesQueryDto } from "./dto/lead-sources-query.dto";
+import { LeadSourcesService } from "./Lead sources.service";
 
 @ApiTags("Dashboard")
 @ApiBearerAuth()
@@ -27,24 +27,38 @@ export class LeadSourcesController {
     name: "preset",
     required: false,
     enum: ["today", "7days", "30days", "90days", "custom"],
-    description: "Date preset (default: 30days)",
   })
   @ApiQuery({
     name: "from",
     required: false,
     example: "2026-04-01",
-    description: "Start date — required when preset=custom",
+    description: "Required when preset=custom",
   })
   @ApiQuery({
     name: "to",
     required: false,
     example: "2026-04-30",
-    description: "End date — required when preset=custom",
+    description: "Required when preset=custom",
   })
   @ApiQuery({
     name: "counselorId",
     required: false,
     description: "Filter by counselor UUID",
+  })
+  @ApiQuery({
+    name: "source",
+    required: false,
+    // ← now documented in Swagger too
+    enum: [
+      "INSTAGRAM",
+      "WEBSITE",
+      "WALK_IN",
+      "GOOGLE_ADS",
+      "META_ADS",
+      "REFERRAL",
+      "GOOGLE_SHEET",
+    ],
+    description: "Filter by lead source",
   })
   @ApiResponse({
     status: 200,
@@ -60,7 +74,12 @@ export class LeadSourcesController {
         sources: [
           { source: "WEBSITE", count: 2, percentage: 33, color: "#22C55E" },
           { source: "INSTAGRAM", count: 2, percentage: 33, color: "#E91E8C" },
-          { source: "FACEBOOK", count: 1, percentage: 17, color: "#3B82F6" },
+          {
+            source: "GOOGLE_SHEET",
+            count: 1,
+            percentage: 17,
+            color: "#64748B",
+          },
           { source: "REFERRAL", count: 1, percentage: 17, color: "#F59E0B" },
         ],
       },
