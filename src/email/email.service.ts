@@ -59,6 +59,7 @@ export class EmailService {
           <p><b>📞 Phone:</b> ${lead.phone}</p>
           <p><b>🌍 Country:</b> ${lead.country}</p>
           <p><b>🔥 Priority:</b> ${lead.priority}</p>
+          <p><b>📚 Category:</b> ${lead.category ?? "—"}</p>
         </div>
 
         <a href="${leadUrl}" 
@@ -112,6 +113,7 @@ export class EmailService {
               <p><b>🌍 Country:</b> ${lead.country}</p>
               <p><b>🔥 Priority:</b> ${lead.priority}</p>
               <p><b>📢 Source:</b> ${lead.source}</p>
+              <p><b>📚 Category:</b> ${lead.category ?? "—"}</p>
             </div>
 
             <a href="${leadUrl}" 
