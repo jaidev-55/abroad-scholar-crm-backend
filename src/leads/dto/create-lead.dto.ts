@@ -86,7 +86,12 @@ export class CreateLeadDto {
   @IsString({ each: true })
   notes?: string[];
 
-  @ApiPropertyOptional({ enum: LeadCategory, example: "ADMISSION" })
+  @ApiPropertyOptional({
+    enum: ["ACADEMIC", "ADMISSION"],
+    example: "ADMISSION",
+    description:
+      "Lead category — ACADEMIC (IELTS/PTE) or ADMISSION (University)",
+  })
   @IsOptional()
   @IsEnum(LeadCategory)
   category?: LeadCategory;
