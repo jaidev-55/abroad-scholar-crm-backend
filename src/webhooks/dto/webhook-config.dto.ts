@@ -1,5 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from "class-validator";
+import {
+  IsBoolean,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from "class-validator";
+
+export enum LeadCategory {
+  ACADEMIC = "ACADEMIC",
+  ADMISSION = "ADMISSION",
+}
 
 export class CreateWebhookConfigDto {
   @ApiProperty({ example: "META" })
@@ -21,4 +32,9 @@ export class CreateWebhookConfigDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ enum: LeadCategory, example: "ADMISSION" })
+  @IsEnum(LeadCategory)
+  @IsOptional()
+  category?: LeadCategory;
 }

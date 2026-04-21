@@ -111,6 +111,7 @@ export class LeadsService {
         followUpDate: dto.followUpDate ? new Date(dto.followUpDate) : undefined,
         counselorId: assignedCounselorId,
         status: dto.status ?? "NEW",
+        category: dto.category ?? null,
       },
     });
 
@@ -199,6 +200,7 @@ export class LeadsService {
     if (priority) where.priority = priority;
     if (status) where.status = status;
     if (lostReason) where.lostReason = lostReason;
+    if (filters.category) where.category = filters.category;
 
     //  Date range filter
     if (startDate && endDate) {

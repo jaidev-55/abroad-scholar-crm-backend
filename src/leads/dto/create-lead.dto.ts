@@ -9,7 +9,12 @@ import {
   IsNotEmpty,
 } from "class-validator";
 import { Type } from "class-transformer";
-import { LeadSource, LeadPriority, LeadStatus } from "@prisma/client";
+import {
+  LeadSource,
+  LeadPriority,
+  LeadStatus,
+  LeadCategory,
+} from "@prisma/client";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export enum AssignmentType {
@@ -80,4 +85,9 @@ export class CreateLeadDto {
   @IsArray()
   @IsString({ each: true })
   notes?: string[];
+
+  @ApiPropertyOptional({ enum: LeadCategory, example: "ADMISSION" })
+  @IsOptional()
+  @IsEnum(LeadCategory)
+  category?: LeadCategory;
 }

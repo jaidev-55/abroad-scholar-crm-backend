@@ -69,6 +69,7 @@ export class WebhooksService {
           email: leadData.email,
           country: leadData.country,
           source: "META_ADS",
+          category: formConfig?.category ?? null,
           meta: {
             leadgenId,
             formId,
@@ -123,7 +124,6 @@ export class WebhooksService {
       where: { formId },
     });
 
-    // Paginate through all leads
     while (nextUrl) {
       const response: Response = await fetch(nextUrl);
       const data: any = await response.json();
@@ -149,6 +149,7 @@ export class WebhooksService {
           email: getValue("email"),
           country: getValue("city") ?? getValue("country") ?? "Unknown",
           source: "META_ADS",
+          category: formConfig?.category ?? null, // ← pass category from form config
           meta: {
             leadgenId: lead.id,
             formId,
@@ -184,12 +185,18 @@ export class WebhooksService {
     const getValue = (name: string) =>
       columnData.find((c: any) => c.column_id === name)?.string_value ?? null;
 
+    // For Google leads, look up the config by campaign ID if available
+    const googleConfig = await this.prisma.webhookConfig.findFirst({
+      where: { platform: "GOOGLE", isActive: true },
+    });
+
     await this.createLeadFromWebhook({
       fullName: getValue("FULL_NAME") ?? "Unknown",
       phone: getValue("PHONE_NUMBER"),
       email: getValue("EMAIL"),
       country: getValue("COUNTRY"),
       source: "GOOGLE_ADS",
+      category: googleConfig?.category ?? null, // ← pass category from form config
       meta: { campaignId: leadData.campaign_id, gclid: leadData.gclid },
     });
 
@@ -203,6 +210,7 @@ export class WebhooksService {
     email?: string;
     country?: string;
     source: "META_ADS" | "GOOGLE_ADS";
+    category?: string | null; // ← ACADEMIC | ADMISSION | null
     meta?: any;
     skipEmail?: boolean;
   }) {
@@ -246,13 +254,14 @@ export class WebhooksService {
         priority: "HOT",
         status: "NEW",
         counselorId,
+        category: (data.category as any) ?? null,
       },
     });
 
     await this.prisma.leadActivity.create({
       data: {
         type: "EDIT",
-        message: `Auto-created from ${data.source} webhook`,
+        message: `Auto-created from ${data.source} webhook${data.category ? ` [${data.category}]` : ""}`,
         leadId: newLead.id,
         meta: data.meta,
       },
@@ -266,7 +275,6 @@ export class WebhooksService {
       where: { role: "ADMIN" },
     });
 
-    // Only send email if not bulk syncing
     if (counselor && !data.skipEmail) {
       Promise.all([
         this.emailService.sendLeadAssignedToCounselor(counselor, newLead),
@@ -275,7 +283,7 @@ export class WebhooksService {
     }
 
     this.logger.log(
-      `New ${data.source} lead: ${newLead.id} → Counselor: ${counselorId}`,
+      `New ${data.source} lead: ${newLead.id} → Counselor: ${counselorId} → Category: ${data.category ?? "none"}`,
     );
     return newLead;
   }
@@ -306,14 +314,12 @@ export class WebhooksService {
 
   // ─── WEBHOOK CONFIG METHODS ───
 
-  // Get all form configurations
   async getAllConfigs() {
     return this.prisma.webhookConfig.findMany({
       orderBy: { createdAt: "desc" },
     });
   }
 
-  // Get single config by ID
   async getConfigById(id: string) {
     const config = await this.prisma.webhookConfig.findUnique({
       where: { id },
@@ -332,17 +338,17 @@ export class WebhooksService {
       throw new BadRequestException("This form ID is already configured");
     }
 
-    // 1. Save the form configuration
     const config = await this.prisma.webhookConfig.create({
       data: {
         platform: dto.platform,
         formId: dto.formId,
         formName: dto.formName,
         isActive: dto.isActive ?? true,
+        category: (dto.category as any) ?? null,
       },
     });
 
-    // 2. Auto-sync past leads in background (non-blocking)
+    // Auto-sync past leads in background (non-blocking)
     if (dto.platform === "META") {
       this.syncMetaLeads(dto.formId)
         .then((result) => {
@@ -358,15 +364,12 @@ export class WebhooksService {
     return config;
   }
 
-  // Toggle form active/inactive
   async toggleConfig(id: string) {
     const config = await this.prisma.webhookConfig.findUnique({
       where: { id },
     });
 
-    if (!config) {
-      throw new NotFoundException("Config not found");
-    }
+    if (!config) throw new NotFoundException("Config not found");
 
     return this.prisma.webhookConfig.update({
       where: { id },
@@ -374,7 +377,6 @@ export class WebhooksService {
     });
   }
 
-  // Delete form configuration
   async deleteConfig(id: string) {
     return this.prisma.webhookConfig.delete({
       where: { id },
