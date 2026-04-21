@@ -52,6 +52,7 @@ export class LeadsController {
   getStats() {
     return this.leadsService.getStats();
   }
+
   // Create a new lead
   @ApiOperation({ summary: "Create new lead" })
   @ApiResponse({ status: 201, description: "Lead created successfully" })
@@ -85,6 +86,12 @@ export class LeadsController {
   @ApiQuery({ name: "endDate", required: false })
   @ApiQuery({ name: "page", required: false })
   @ApiQuery({ name: "limit", required: false })
+  @ApiQuery({
+    name: "category",
+    required: false,
+    enum: ["ACADEMIC", "ADMISSION"],
+    description: "Filter by lead category",
+  })
   @Get()
   findAll(
     @Query("search") search?: string,
@@ -100,6 +107,7 @@ export class LeadsController {
     @Query("endDate") endDate?: string,
     @Query("page") page?: number,
     @Query("limit") limit?: number,
+    @Query("category") category?: string, // ← new
     @Req() req?: Request,
   ) {
     return this.leadsService.findAll(
@@ -117,6 +125,7 @@ export class LeadsController {
         endDate,
         page,
         limit,
+        category, // ← new
       },
       req?.user,
     );
@@ -175,14 +184,14 @@ export class LeadsController {
     return this.leadsService.logCall(id, dto, req.user);
   }
 
-  // GET /leads/:id/call-logs → call history + summary stats
+  // GET /leads/:id/call-logs
   @Get(":id/call-logs")
   @ApiOperation({ summary: "Get call log history for a lead" })
   getCallLogs(@Param("id") id: string) {
     return this.leadsService.getCallLogs(id);
   }
 
-  // POST /leads/:id/send-template-email  send email to lead using a saved template
+  // POST /leads/:id/send-template-email
   @Post(":id/send-template-email")
   @UseGuards(JwtAuthGuard)
   async sendTemplateEmail(
@@ -243,7 +252,8 @@ export class LeadsController {
   deleteLead(@Param("id") id: string) {
     return this.leadsService.deleteLead(id);
   }
-  // Delete multiple Leads
+
+  // Delete multiple leads
   @Post("bulk-delete")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN")

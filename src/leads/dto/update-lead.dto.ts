@@ -15,6 +15,7 @@ import {
   LeadSource,
   LeadPriority,
   LostReason,
+  LeadCategory,
 } from "@prisma/client";
 
 class UpdateNoteDto {
@@ -29,49 +30,41 @@ class UpdateNoteDto {
 }
 
 export class UpdateLeadDto {
-  // Full name
   @ApiPropertyOptional({ example: "John Doe" })
   @IsOptional()
   @IsString()
   fullName?: string;
 
-  // Phone
   @ApiPropertyOptional({ example: "+919876543210" })
   @IsOptional()
   @IsString()
   phone?: string;
 
-  // Email
   @ApiPropertyOptional({ example: "student@email.com" })
   @IsOptional()
   @IsEmail()
   email?: string;
 
-  // Country
   @ApiPropertyOptional({ example: "Canada" })
   @IsOptional()
   @IsString()
   country?: string;
 
-  // Status
   @ApiPropertyOptional({ enum: LeadStatus })
   @IsOptional()
   @IsEnum(LeadStatus)
   status?: LeadStatus;
 
-  // Source
   @ApiPropertyOptional({ enum: LeadSource })
   @IsOptional()
   @IsEnum(LeadSource)
   source?: LeadSource;
 
-  // Priority
   @ApiPropertyOptional({ enum: LeadPriority })
   @IsOptional()
   @IsEnum(LeadPriority)
   priority?: LeadPriority;
 
-  // Counselor
   @ApiPropertyOptional({
     description: "Admin only: assign or change counselor",
   })
@@ -79,28 +72,32 @@ export class UpdateLeadDto {
   @IsString()
   counselorId?: string;
 
-  // IELTS Score
   @ApiPropertyOptional({ example: 6.5 })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   ieltsScore?: number;
 
-  // Follow-up Date (fixed format)
-  @ApiPropertyOptional({
-    example: "2026-04-01",
-  })
+  @ApiPropertyOptional({ example: "2026-04-01" })
   @IsOptional()
   @IsDateString()
   followUpDate?: string;
 
-  // Lost reason
   @ApiPropertyOptional({ enum: LostReason })
   @IsOptional()
   @IsEnum(LostReason)
   lostReason?: LostReason;
 
-  // Notes
+  @ApiPropertyOptional({
+    enum: ["ACADEMIC", "ADMISSION"],
+    example: "ADMISSION",
+    description:
+      "Lead category — ACADEMIC (IELTS/PTE) or ADMISSION (University)",
+  })
+  @IsOptional()
+  @IsEnum(LeadCategory)
+  category?: LeadCategory;
+
   @ApiPropertyOptional({
     type: [UpdateNoteDto],
     example: [
