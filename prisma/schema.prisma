@@ -53,6 +53,7 @@ enum LeadSource {
   META_ADS
   REFERRAL
   GOOGLE_SHEET
+  WHATSAPP
 }
 
 // Priority level for counselor attention

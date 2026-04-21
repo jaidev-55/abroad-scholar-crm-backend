@@ -12,7 +12,6 @@ import * as nodemailer from "nodemailer";
 import * as path from "path";
 import { LostReason } from "@prisma/client";
 import { EmailService } from "../email/email.service";
-import { error } from "console";
 
 @Injectable()
 export class LeadsService {
