@@ -19,7 +19,7 @@ export class WebhooksService {
     private emailService: EmailService,
   ) {}
 
-  // ─── AUTO-SYNC CRON (Every 3 minutes) ───
+  // ─── AUTO-SYNC CRON (Every 1 minutes) ───
   @Cron("*/1 * * * *")
   async autoSyncAllForms() {
     if (this.isSyncing) {
