@@ -20,7 +20,7 @@ export class WebhooksService {
   ) {}
 
   // ─── AUTO-SYNC CRON (Every 3 minutes) ───
-  @Cron("*/3 * * * *")
+  @Cron("*/1 * * * *")
   async autoSyncAllForms() {
     if (this.isSyncing) {
       this.logger.warn("Previous sync still running, skipping...");
