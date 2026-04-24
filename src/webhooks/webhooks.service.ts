@@ -4,6 +4,7 @@ import {
   NotFoundException,
   Logger,
 } from "@nestjs/common";
+import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../email/email.service";
 import { CreateWebhookConfigDto } from "./dto/webhook-config.dto";
@@ -11,11 +12,57 @@ import { CreateWebhookConfigDto } from "./dto/webhook-config.dto";
 @Injectable()
 export class WebhooksService {
   private readonly logger = new Logger(WebhooksService.name);
+  private isSyncing = false;
 
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
   ) {}
+
+  // ─── AUTO-SYNC CRON (Every 3 minutes) ───
+  @Cron("*/3 * * * *")
+  async autoSyncAllForms() {
+    if (this.isSyncing) {
+      this.logger.warn("Previous sync still running, skipping...");
+      return;
+    }
+
+    const activeConfigs = await this.prisma.webhookConfig.findMany({
+      where: { platform: "META", isActive: true },
+    });
+
+    if (activeConfigs.length === 0) return;
+
+    this.isSyncing = true;
+
+    try {
+      this.logger.log(
+        `Auto-sync running for ${activeConfigs.length} active form(s)`,
+      );
+
+      let totalNew = 0;
+
+      for (const config of activeConfigs) {
+        try {
+          const result = await this.syncMetaLeads(config.formId);
+          if (result.synced > 0) {
+            totalNew += result.synced;
+            this.logger.log(
+              `Imported ${result.synced} new leads from ${config.formName}`,
+            );
+          }
+        } catch (err) {
+          this.logger.error(`Auto-sync failed for ${config.formName}:`, err);
+        }
+      }
+
+      if (totalNew > 0) {
+        this.logger.log(`Auto-sync total: ${totalNew} new leads imported`);
+      }
+    } finally {
+      this.isSyncing = false;
+    }
+  }
 
   // ─── META WEBHOOK VERIFICATION ───
   verifyMetaWebhook(mode: string, token: string, challenge: string): string {
@@ -33,10 +80,14 @@ export class WebhooksService {
 
   // ─── PROCESS META LEAD (real-time webhook) ───
   async processMetaLead(body: any) {
+    this.logger.log("Meta webhook received");
+
     const activeConfigs = await this.prisma.webhookConfig.findMany({
       where: { platform: "META", isActive: true },
     });
     const allowedFormIds = activeConfigs.map((c) => c.formId);
+
+    this.logger.log(`Active form IDs: [${allowedFormIds.join(", ")}]`);
 
     const entries = body?.entry ?? [];
 
@@ -98,7 +149,7 @@ export class WebhooksService {
         fields.find((f: any) => f.name === name)?.values?.[0] ?? null;
 
       return {
-        fullName: getValue("full_name") ?? "Unknown",
+        fullName: getValue("full_name") ?? getValue("name") ?? "Unknown",
         phone: getValue("phone_number") ?? getValue("phone"),
         email: getValue("email"),
         country: getValue("city") ?? getValue("country") ?? "Unknown",
@@ -149,7 +200,7 @@ export class WebhooksService {
           email: getValue("email"),
           country: getValue("city") ?? getValue("country") ?? "Unknown",
           source: "META_ADS",
-          category: formConfig?.category ?? null, // ← pass category from form config
+          category: formConfig?.category ?? null,
           meta: {
             leadgenId: lead.id,
             formId,
@@ -185,7 +236,6 @@ export class WebhooksService {
     const getValue = (name: string) =>
       columnData.find((c: any) => c.column_id === name)?.string_value ?? null;
 
-    // For Google leads, look up the config by campaign ID if available
     const googleConfig = await this.prisma.webhookConfig.findFirst({
       where: { platform: "GOOGLE", isActive: true },
     });
@@ -196,7 +246,7 @@ export class WebhooksService {
       email: getValue("EMAIL"),
       country: getValue("COUNTRY"),
       source: "GOOGLE_ADS",
-      category: googleConfig?.category ?? null, // ← pass category from form config
+      category: googleConfig?.category ?? null,
       meta: { campaignId: leadData.campaign_id, gclid: leadData.gclid },
     });
 
@@ -210,7 +260,7 @@ export class WebhooksService {
     email?: string;
     country?: string;
     source: "META_ADS" | "GOOGLE_ADS";
-    category?: string | null; // ← ACADEMIC | ADMISSION | null
+    category?: string | null;
     meta?: any;
     skipEmail?: boolean;
   }) {
@@ -328,7 +378,6 @@ export class WebhooksService {
     return config;
   }
 
-  // Add new form configuration + AUTO-SYNC past leads
   async addConfig(dto: CreateWebhookConfigDto) {
     const existing = await this.prisma.webhookConfig.findUnique({
       where: { formId: dto.formId },
@@ -348,7 +397,6 @@ export class WebhooksService {
       },
     });
 
-    // Auto-sync past leads in background (non-blocking)
     if (dto.platform === "META") {
       this.syncMetaLeads(dto.formId)
         .then((result) => {
