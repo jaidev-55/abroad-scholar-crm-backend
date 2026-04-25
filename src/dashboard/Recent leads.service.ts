@@ -17,7 +17,7 @@ export class RecentLeadsService {
       status,
       priority,
       search,
-      limit = 6,
+      limit = 10,
       offset = 0,
     } = query;
 
@@ -78,7 +78,6 @@ export class RecentLeadsService {
       status: lead.status,
       followUpDate: lead.followUpDate,
       createdAt: lead.createdAt,
-      // Initials for avatar (e.g. "Priya Sharma" → "PS")
       initials: lead.fullName
         .split(" ")
         .map((w) => w[0])
