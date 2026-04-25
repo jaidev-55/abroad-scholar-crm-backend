@@ -29,10 +29,13 @@ export class DashboardService {
       ...(source && { source: source as LeadSource }),
     });
 
-    const followUpWhere = (dueBefore: Date): Prisma.LeadWhereInput => ({
+    const followUpWhere = (
+      rangeFrom: Date,
+      rangeTo: Date,
+    ): Prisma.LeadWhereInput => ({
       ...(counselorId && { counselorId }),
       ...(source && { source: source as LeadSource }),
-      followUpDate: { lte: dueBefore },
+      followUpDate: { gte: rangeFrom, lte: rangeTo },
       status: { notIn: [LeadStatus.CONVERTED, LeadStatus.LOST] },
     });
 
@@ -64,9 +67,11 @@ export class DashboardService {
       }),
 
       this.prisma.lead.count({
-        where: followUpWhere(this.endOfDay(new Date())),
+        where: followUpWhere(currentFrom, currentTo),
       }),
-      this.prisma.lead.count({ where: followUpWhere(prevTo) }),
+      this.prisma.lead.count({
+        where: followUpWhere(prevFrom, prevTo),
+      }),
 
       this.prisma.lead.count({
         where: {
