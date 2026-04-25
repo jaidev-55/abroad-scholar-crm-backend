@@ -12,12 +12,14 @@ import * as nodemailer from "nodemailer";
 import * as path from "path";
 import { LostReason } from "@prisma/client";
 import { EmailService } from "../email/email.service";
+import { NotificationsGateway } from "../notifications/notifications.gateway";
 
 @Injectable()
 export class LeadsService {
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
+    private notificationsGateway: NotificationsGateway,
   ) {}
   // Create a new lead
   async create(dto: CreateLeadDto, user: any) {
@@ -157,6 +159,17 @@ export class LeadsService {
       this.emailService.sendLeadCreatedToAdmins(admins, newLead),
     ]).catch((err) => {
       console.error("Email error:", err);
+    });
+
+    this.notificationsGateway.pushToAll({
+      id: `new-${newLead.id}`,
+      type: "new_lead",
+      title: `New lead: ${newLead.fullName}`,
+      subtitle: `From ${newLead.source?.replace(/_/g, " ")} — ${newLead.country ?? ""}`,
+      time: newLead.createdAt.toISOString(),
+      priority: "low",
+      leadId: newLead.id,
+      read: false,
     });
 
     return newLead;
