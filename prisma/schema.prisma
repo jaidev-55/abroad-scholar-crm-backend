@@ -24,6 +24,7 @@ model User {
   role         UserRole       @default(COUNSELOR)
   isVerified   Boolean        @default(false)
   leads        Lead[]
+  callLogs   CallLog[]
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   LeadActivity LeadActivity[]
@@ -105,7 +106,7 @@ model Lead {
   counselor    User?     @relation(fields: [counselorId], references: [id])
   followUpDate DateTime?
 
-
+callLogs   CallLog[]
   // Lost reason 
   lostReason   LostReason?
 
@@ -196,6 +197,34 @@ isActive Boolean @default(true)
 category  LeadCategory?
 createdAt DateTime @default(now())
 updatedAt DateTime @updatedAt
+}
+
+
+
+enum CallOutcome {
+  INTERESTED
+  CONVERTED
+  SCHEDULE_CALLBACK
+  NOT_INTERESTED
+  NO_ANSWER
+  VOICEMAIL
+}
+
+model CallLog {
+  id         String      @id @default(uuid())
+  outcome    CallOutcome
+  leadId     String
+  lead       Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  counselorId String?
+  counselor  User?       @relation(fields: [counselorId], references: [id])
+  notes      String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([outcome])
+  @@index([leadId])
+  @@index([counselorId])
+  @@index([createdAt])
 }
 
 

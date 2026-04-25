@@ -47,6 +47,8 @@ export class DashboardService {
       prevConverted,
       lostLeads,
       prevLostLeads,
+      academic,
+      admission,
     ] = await Promise.all([
       this.prisma.lead.count({ where: baseWhere(currentFrom, currentTo) }),
       this.prisma.lead.count({ where: baseWhere(prevFrom, prevTo) }),
@@ -85,6 +87,13 @@ export class DashboardService {
       this.prisma.lead.count({
         where: { ...baseWhere(prevFrom, prevTo), status: LeadStatus.LOST },
       }),
+
+      this.prisma.lead.count({
+        where: { ...baseWhere(currentFrom, currentTo), category: "ACADEMIC" },
+      }),
+      this.prisma.lead.count({
+        where: { ...baseWhere(currentFrom, currentTo), category: "ADMISSION" },
+      }),
     ]);
 
     return {
@@ -114,6 +123,8 @@ export class DashboardService {
           value: lostLeads,
           change: this.pctChange(lostLeads, prevLostLeads),
         },
+        academic,
+        admission,
       },
     };
   }

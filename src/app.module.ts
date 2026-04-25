@@ -8,6 +8,8 @@ import { EmailModule } from "./email/email.module";
 import { AppController } from "./app.controller";
 import { WebhooksModule } from "./webhooks/webhooks.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
+import { NotificationsModule } from "./notifications/Notifications.module";
+import { CallOutcomesModule } from "./dashboard/Call outcomes.module";
 
 @Module({
   imports: [
@@ -17,7 +19,8 @@ import { DashboardModule } from "./dashboard/dashboard.module";
     LeadsModule,
     EmailTemplatesModule,
     DashboardModule,
-    
+    CallOutcomesModule,
+    NotificationsModule,
     EmailModule,
     WebhooksModule,
   ],
