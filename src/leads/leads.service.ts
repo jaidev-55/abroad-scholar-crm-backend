@@ -597,6 +597,15 @@ export class LeadsService {
 
     const followUpDate = dto.followUpDate ? new Date(dto.followUpDate) : null;
 
+    await this.prisma.callLog.create({
+      data: {
+        outcome: dto.outcome as any,
+        leadId,
+        counselorId: user.id,
+        notes: dto.notes ?? null,
+      },
+    });
+
     await this.prisma.leadActivity.create({
       data: {
         type: "CALL",
