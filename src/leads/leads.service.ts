@@ -21,8 +21,11 @@ export class LeadsService {
     private emailService: EmailService,
     private notificationsGateway: NotificationsGateway,
   ) {}
-  // Create a new lead
+
   async create(dto: CreateLeadDto, user: any) {
+    // Normalise user.id — JWT strategy may return sub or userId instead of id
+    user = { ...user, id: user.id ?? user.sub ?? user.userId };
+
     // 1. Prevent duplicate
     const existing = await this.prisma.lead.findUnique({
       where: { phone: dto.phone },
@@ -32,31 +35,41 @@ export class LeadsService {
       throw new BadRequestException("Lead with this phone already exists");
     }
 
-    let assignedCounselorId: string;
-
-    //  Default assignment type
     const assignmentType = dto.assignmentType ?? "AUTO";
+    let assignedCounselorId: string | undefined;
+    let counselorRecord: any = null;
 
-    // CASE 1: Counselor creating lead
+    // CASE 1: Counselor creating their own lead
     if (user.role === "COUNSELOR") {
+      if (!user?.id) {
+        throw new BadRequestException(
+          "User ID is missing from request context",
+        );
+      }
       assignedCounselorId = user.id;
+      counselorRecord = await this.prisma.user.findUnique({
+        where: { id: user.id },
+      });
     }
 
     // CASE 2: ADMIN / others
     else {
-      // MANUAL ASSIGNMENT
       if (assignmentType === "MANUAL") {
+        // Manual — counselorId required
         if (!dto.counselorId) {
           throw new BadRequestException(
             "Counselor is required for manual assignment",
           );
         }
-
+        counselorRecord = await this.prisma.user.findUnique({
+          where: { id: dto.counselorId },
+        });
+        if (!counselorRecord) {
+          throw new BadRequestException("Invalid counselor ID");
+        }
         assignedCounselorId = dto.counselorId;
-      }
-
-      // AUTO (ROUND ROBIN)
-      else {
+      } else {
+        // AUTO — round-robin among counselors
         const counselors = await this.prisma.user.findMany({
           where: { role: "COUNSELOR" },
           orderBy: { createdAt: "asc" },
@@ -71,52 +84,38 @@ export class LeadsService {
           orderBy: { createdAt: "desc" },
         });
 
-        let nextCounselorId: string;
-
-        if (!lastLead) {
-          nextCounselorId = counselors[0].id;
-        } else {
+        let nextIndex = 0;
+        if (lastLead) {
           const lastIndex = counselors.findIndex(
             (c) => c.id === lastLead.counselorId,
           );
-
-          const nextIndex =
+          nextIndex =
             lastIndex === -1 ? 0 : (lastIndex + 1) % counselors.length;
-
-          nextCounselorId = counselors[nextIndex].id;
         }
 
-        assignedCounselorId = nextCounselorId;
+        counselorRecord = counselors[nextIndex];
+        assignedCounselorId = counselorRecord.id;
       }
     }
 
-    // 3. Validate counselor
-    const counselorExists = await this.prisma.user.findUnique({
-      where: { id: assignedCounselorId },
-    });
-
-    if (!counselorExists) {
-      throw new BadRequestException("Invalid counselor ID");
-    }
-
-    // 4. Create lead
+    // 3. Create lead — counselorId is now always valid or undefined
     const newLead = await this.prisma.lead.create({
       data: {
         fullName: dto.fullName,
         phone: dto.phone,
         email: dto.email,
-        country: dto.country,
+        country: dto.country || null,
         source: dto.source,
         priority: dto.priority,
         ieltsScore: dto.ieltsScore,
         followUpDate: dto.followUpDate ? new Date(dto.followUpDate) : undefined,
-        counselorId: assignedCounselorId,
+        counselorId: assignedCounselorId ?? null,
         status: dto.status ?? "NEW",
         category: dto.category ?? null,
       },
     });
 
-    // 5. SAVE NOTES
+    // 4. Save notes
     if (dto.notes && dto.notes.length > 0) {
       await this.prisma.leadNote.createMany({
         data: dto.notes.map((note) => ({
@@ -125,7 +124,6 @@ export class LeadsService {
         })),
       });
 
-      // Optional: log activity
       await this.prisma.leadActivity.create({
         data: {
           type: "NOTE",
@@ -136,7 +134,7 @@ export class LeadsService {
       });
     }
 
-    // 5. Activity log (KEEP awaited)
+    // 5. Activity log
     await this.prisma.leadActivity.create({
       data: {
         type: "EDIT",
@@ -146,16 +144,18 @@ export class LeadsService {
       },
     });
 
-    // 6. Prepare email data
-    const counselor = counselorExists!;
-
+    // 6. Non-blocking emails (only if counselor was assigned)
     const admins = await this.prisma.user.findMany({
       where: { role: "ADMIN" },
     });
 
-    // 7. NON-BLOCKING EMAILS
     Promise.all([
-      this.emailService.sendLeadAssignedToCounselor(counselor, newLead),
+      counselorRecord
+        ? this.emailService.sendLeadAssignedToCounselor(
+            counselorRecord,
+            newLead,
+          )
+        : Promise.resolve(),
       this.emailService.sendLeadCreatedToAdmins(admins, newLead),
     ]).catch((err) => {
       console.error("Email error:", err);
@@ -195,7 +195,6 @@ export class LeadsService {
 
     const where: any = {};
 
-    // Search by name, phone or email
     if (search) {
       where.OR = [
         { fullName: { contains: search, mode: "insensitive" } },
@@ -203,8 +202,6 @@ export class LeadsService {
         { email: { contains: search, mode: "insensitive" } },
       ];
     }
-
-    //  Exact match filters
 
     if (source) where.source = source;
     if (counselorId) where.counselorId = counselorId;
@@ -214,14 +211,13 @@ export class LeadsService {
     if (lostReason) where.lostReason = lostReason;
     if (filters.category) where.category = filters.category;
 
-    //  Date range filter
     if (startDate && endDate) {
       where.createdAt = {
         gte: new Date(startDate),
         lte: new Date(endDate),
       };
     }
-    // Filter by follow-up date range
+
     if (followUpFrom && followUpTo) {
       where.followUpDate = {
         gte: new Date(followUpFrom),
@@ -229,20 +225,16 @@ export class LeadsService {
       };
     }
 
-    // If pagination not provided -> return all (Pipeline view)
     if (!page || !limit) {
       const leads = await this.prisma.lead.findMany({
         where,
         include: {
           counselor: true,
-          notes: {
-            orderBy: { createdAt: "desc" },
-          },
+          notes: { orderBy: { createdAt: "desc" } },
         },
         orderBy: { createdAt: "desc" },
       });
 
-      // RBAC: hide source for counselors
       if (user?.role === "COUNSELOR") {
         return leads.map((lead) => {
           const { source, ...rest } = lead;
@@ -253,7 +245,6 @@ export class LeadsService {
       return leads;
     }
 
-    // Pagination mode (All Leads table)
     const skip = (Number(page) - 1) * Number(limit);
 
     const [data, total] = await Promise.all([
@@ -261,9 +252,7 @@ export class LeadsService {
         where,
         include: {
           counselor: true,
-          notes: {
-            orderBy: { createdAt: "desc" },
-          },
+          notes: { orderBy: { createdAt: "desc" } },
         },
         skip,
         take: Number(limit),
@@ -283,15 +272,12 @@ export class LeadsService {
     };
   }
 
-  // Get single lead with counselor and notes
   async findOne(id: string) {
     const lead = await this.prisma.lead.findUnique({
       where: { id },
       include: {
         counselor: true,
-        notes: {
-          orderBy: { createdAt: "desc" },
-        },
+        notes: { orderBy: { createdAt: "desc" } },
       },
     });
 
@@ -302,8 +288,8 @@ export class LeadsService {
     return lead;
   }
 
-  // Update lead details
   async updateLead(id: string, dto: UpdateLeadDto, user: any) {
+    user = { ...user, id: user.id ?? user.sub ?? user.userId };
     const existingLead = await this.prisma.lead.findUnique({
       where: { id },
       include: { notes: true },
@@ -313,7 +299,6 @@ export class LeadsService {
       throw new NotFoundException("Lead not found");
     }
 
-    // 1. Ensure phone number is unique
     if (dto.phone && dto.phone !== existingLead.phone) {
       const phoneExists = await this.prisma.lead.findUnique({
         where: { phone: dto.phone },
@@ -324,7 +309,6 @@ export class LeadsService {
       }
     }
 
-    // 2. Handle manual counselor assignment
     let assignedCounselorId = existingLead.counselorId;
 
     if (dto.counselorId) {
@@ -339,7 +323,6 @@ export class LeadsService {
       assignedCounselorId = dto.counselorId;
     }
 
-    // 3. LOST status requires reason
     if (
       dto.status === "LOST" &&
       (!dto.lostReason || dto.lostReason.trim() === "")
@@ -349,7 +332,6 @@ export class LeadsService {
       );
     }
 
-    // 4. Update lead fields (exclude notes)
     const { notes, followUpDate, lostReason, ...leadData } = dto;
 
     const updatedLead = await this.prisma.lead.update({
@@ -362,18 +344,13 @@ export class LeadsService {
       },
     });
 
-    // 5. HANDLE NOTES (ADD + UPDATE)
     if (notes && notes.length > 0) {
       const cleanedNotes = notes
-        .map((n) => ({
-          id: n.id,
-          content: n.content.trim(),
-        }))
+        .map((n) => ({ id: n.id, content: n.content.trim() }))
         .filter((n) => n.content.length > 0);
 
       for (const note of cleanedNotes) {
         if (note.id) {
-          // Check if note exists before updating
           const existingNote = await this.prisma.leadNote.findUnique({
             where: { id: note.id },
           });
@@ -384,27 +361,18 @@ export class LeadsService {
               data: { content: note.content },
             });
           } else {
-            // Note ID doesn't exist — create as new note instead
             await this.prisma.leadNote.create({
-              data: {
-                content: note.content,
-                leadId: id,
-              },
+              data: { content: note.content, leadId: id },
             });
           }
         } else {
-          // CREATE new note
           await this.prisma.leadNote.create({
-            data: {
-              content: note.content,
-              leadId: id,
-            },
+            data: { content: note.content, leadId: id },
           });
         }
       }
     }
 
-    // Activity log for notes
     if (dto.counselorId && dto.counselorId !== existingLead.counselorId) {
       await this.prisma.leadActivity.create({
         data: {
@@ -412,15 +380,11 @@ export class LeadsService {
           message: "Counselor reassigned",
           leadId: id,
           userId: user.id,
-          meta: {
-            from: existingLead.counselorId,
-            to: dto.counselorId,
-          },
+          meta: { from: existingLead.counselorId, to: dto.counselorId },
         },
       });
     }
 
-    // 6. Log status change
     if (dto.status && dto.status !== existingLead.status) {
       await this.prisma.leadActivity.create({
         data: {
@@ -432,7 +396,6 @@ export class LeadsService {
       });
     }
 
-    // 7. Log edit activity
     await this.prisma.leadActivity.create({
       data: {
         type: "EDIT",
@@ -445,19 +408,14 @@ export class LeadsService {
     return updatedLead;
   }
 
-  // Delete single Lead details
   async deleteLead(id: string) {
-    const lead = await this.prisma.lead.findUnique({
-      where: { id },
-    });
+    const lead = await this.prisma.lead.findUnique({ where: { id } });
 
     if (!lead) {
       throw new NotFoundException("Lead not found");
     }
 
-    await this.prisma.lead.delete({
-      where: { id },
-    });
+    await this.prisma.lead.delete({ where: { id } });
     return { message: "Lead deleted successfully" };
   }
 
@@ -466,7 +424,6 @@ export class LeadsService {
       throw new BadRequestException("No IDs provided");
     }
 
-    // Verify all leads exist before deleting
     const found = await this.prisma.lead.findMany({
       where: { id: { in: ids } },
       select: { id: true },
@@ -482,102 +439,58 @@ export class LeadsService {
       where: { id: { in: ids } },
     });
 
-    return {
-      message: `${result.count} lead(s) deleted successfully`,
-    };
+    return { message: `${result.count} lead(s) deleted successfully` };
   }
 
-  // Dashboard statistics
   async getStats() {
     const now = new Date();
-
-    // Start of today
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
     const total = await this.prisma.lead.count();
-
     const newToday = await this.prisma.lead.count({
-      where: {
-        createdAt: {
-          gte: startOfToday,
-        },
-      },
+      where: { createdAt: { gte: startOfToday } },
     });
-
     const followUpsDue = await this.prisma.lead.count({
       where: {
-        followUpDate: {
-          lte: now,
-        },
-        status: {
-          notIn: ["CONVERTED", "LOST"],
-        },
+        followUpDate: { lte: now },
+        status: { notIn: ["CONVERTED", "LOST"] },
       },
     });
-
     const converted = await this.prisma.lead.count({
-      where: {
-        status: "CONVERTED",
-      },
+      where: { status: "CONVERTED" },
     });
+    const lost = await this.prisma.lead.count({ where: { status: "LOST" } });
 
-    const lost = await this.prisma.lead.count({
-      where: {
-        status: "LOST",
-      },
-    });
-
-    return {
-      total,
-      newToday,
-      followUpsDue,
-      converted,
-      lost,
-    };
+    return { total, newToday, followUpsDue, converted, lost };
   }
 
-  // Fetch activity timeline of a lead
   async getActivity(leadId: string, type?: ActivityType, search?: string) {
-    const lead = await this.prisma.lead.findUnique({
-      where: { id: leadId },
-    });
+    const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
 
     if (!lead) {
       throw new NotFoundException("Lead not found");
     }
 
     const where: any = { leadId };
-
-    if (type) {
-      where.type = type;
-    }
-
-    if (search) {
+    if (type) where.type = type;
+    if (search)
       where.OR = [{ message: { contains: search, mode: "insensitive" } }];
-    }
 
     return this.prisma.leadActivity.findMany({
       where,
       include: {
         user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
-          },
+          select: { id: true, name: true, email: true, role: true },
         },
       },
       orderBy: { createdAt: "desc" },
     });
   }
 
-  // Log a call activity for a lead.
   async logCall(leadId: string, dto: CreateCallLogDto, user: any) {
-    const lead = await this.prisma.lead.findUnique({
-      where: { id: leadId },
-    });
+    user = { ...user, id: user.id ?? user.sub ?? user.userId };
+    const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
 
     if (!lead) {
       throw new NotFoundException("Lead not found");
@@ -631,22 +544,16 @@ export class LeadsService {
 
     return { message: "Call logged successfully" };
   }
-  // Fetch call log history for a lead with summary stats
+
   async getCallLogs(leadId: string) {
-    const lead = await this.prisma.lead.findUnique({
-      where: { id: leadId },
-    });
+    const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
 
     if (!lead) {
       throw new NotFoundException("Lead not found");
     }
 
-    // Fetch all CALL activities for this lead
     const callActivities = await this.prisma.leadActivity.findMany({
-      where: {
-        leadId,
-        type: "CALL",
-      },
+      where: { leadId, type: "CALL" },
       include: {
         user: {
           select: { id: true, name: true, email: true, role: true },
@@ -655,14 +562,10 @@ export class LeadsService {
       orderBy: { createdAt: "desc" },
     });
 
-    //  Compute summary stats
     const totalCalls = callActivities.length;
-
-    // Average duration in seconds (only from calls that have duration)
     const callsWithDuration = callActivities.filter(
       (a) => (a.meta as any)?.duration,
     );
-
     const avgDurationSeconds =
       callsWithDuration.length > 0
         ? Math.round(
@@ -672,63 +575,39 @@ export class LeadsService {
             ) / callsWithDuration.length,
           )
         : 0;
-
-    // Conversions = calls with outcome CONVERTED
     const conversions = callActivities.filter(
       (a) => (a.meta as any)?.outcome === "CONVERTED",
     ).length;
-
     const outcomeCounts: Record<string, number> = {};
     for (const activity of callActivities) {
       const outcome = (activity.meta as any)?.outcome;
-      if (outcome) {
-        outcomeCounts[outcome] = (outcomeCounts[outcome] ?? 0) + 1;
-      }
+      if (outcome) outcomeCounts[outcome] = (outcomeCounts[outcome] ?? 0) + 1;
     }
 
     return {
-      summary: {
-        totalCalls,
-        avgDurationSeconds,
-        conversions,
-        outcomeCounts,
-      },
+      summary: { totalCalls, avgDurationSeconds, conversions, outcomeCounts },
       calls: callActivities,
     };
   }
 
-  // Mark a lead as LOST
   async markAsLost(id: string, dto: any) {
-    const lead = await this.prisma.lead.findUnique({
-      where: { id },
-    });
+    const lead = await this.prisma.lead.findUnique({ where: { id } });
 
-    if (!lead) {
-      throw new NotFoundException("Lead not found");
-    }
-
-    // Prevent marking an already lost lead again
+    if (!lead) throw new NotFoundException("Lead not found");
     if (lead.status === "LOST") {
       throw new BadRequestException("Lead is already marked as LOST");
     }
-
-    // Ensure lost reason is provided before marking lead as lost
     if (!dto.lostReason || dto.lostReason.trim() === "") {
       throw new BadRequestException(
         "Lost reason is required before marking a lead as LOST",
       );
     }
 
-    // Update lead status to LOST and store the reason
     const updatedLead = await this.prisma.lead.update({
       where: { id },
-      data: {
-        status: "LOST",
-        lostReason: dto.lostReason as LostReason,
-      },
+      data: { status: "LOST", lostReason: dto.lostReason as LostReason },
     });
 
-    // Log activity for status change
     await this.prisma.leadActivity.create({
       data: {
         type: "STATUS_CHANGE",
@@ -737,57 +616,34 @@ export class LeadsService {
       },
     });
 
-    // Save optional note
     if (dto.additionalNotes) {
       await this.prisma.leadNote.create({
-        data: {
-          content: dto.additionalNotes,
-          leadId: id,
-        },
+        data: { content: dto.additionalNotes, leadId: id },
       });
-      // Log activity for note addition
       await this.prisma.leadActivity.create({
-        data: {
-          type: "NOTE",
-          message: "Lost reason note added",
-          leadId: id,
-        },
+        data: { type: "NOTE", message: "Lost reason note added", leadId: id },
       });
     }
 
     return updatedLead;
   }
 
-  // Add note to a lead
   async addNote(leadId: string, dto: any) {
-    const lead = await this.prisma.lead.findUnique({
-      where: { id: leadId },
-    });
+    const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
 
-    if (!lead) {
-      throw new NotFoundException("Lead not found");
-    }
+    if (!lead) throw new NotFoundException("Lead not found");
 
     const note = await this.prisma.leadNote.create({
-      data: {
-        content: dto.content,
-        leadId,
-      },
+      data: { content: dto.content, leadId },
     });
 
-    // Log note activity
     await this.prisma.leadActivity.create({
-      data: {
-        type: "NOTE",
-        message: "Note added",
-        leadId,
-      },
+      data: { type: "NOTE", message: "Note added", leadId },
     });
 
     return note;
   }
 
-  // Send email to lead using template
   async sendTemplateEmail(leadId: string, templateId: string, user?: any) {
     const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
     if (!lead) throw new NotFoundException("Lead not found");
@@ -816,10 +672,7 @@ export class LeadsService {
 
     const transporter = nodemailer.createTransport({
       service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
     });
 
     await transporter.sendMail({
@@ -840,8 +693,6 @@ export class LeadsService {
           const fs = require("fs");
           if (fs.existsSync(filePath)) {
             return [{ filename: template.attachment, path: filePath }];
-          } else {
-            console.warn("Attachment not found:", filePath);
           }
         } catch (e) {
           console.error("Attachment error:", e);
@@ -867,7 +718,6 @@ export class LeadsService {
     return { message: "Email sent successfully" };
   }
 
-  // Send custom email to lead (without template)
   async sendCustomEmail(
     leadId: string,
     dto: { subject: string; message: string },
@@ -892,10 +742,7 @@ export class LeadsService {
 
     const transporter = nodemailer.createTransport({
       service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
     });
 
     const mailOptions: any = {
@@ -920,10 +767,7 @@ export class LeadsService {
         type: "EMAIL",
         message: `Custom email sent: ${dto.subject}`,
         userId: user?.id ?? null,
-        meta: {
-          subject: dto.subject,
-          sentFrom: fromEmail,
-        },
+        meta: { subject: dto.subject, sentFrom: fromEmail },
       },
     });
 
