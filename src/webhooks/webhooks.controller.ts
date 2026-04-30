@@ -102,7 +102,7 @@ export class WebhooksController {
   @Post("landing-page")
   @HttpCode(200)
   async landingPage(@Body() body: LandingPageWebhookDto) {
-    if (body.token !== process.env.WEBHOOK_TOKEN) {
+    if (body.token !== process.env.META_WEBHOOK_VERIFY_TOKEN) {
       throw new BadRequestException("Invalid token");
     }
     const systemUser = { id: null, role: "ADMIN", name: "Landing Page" };
