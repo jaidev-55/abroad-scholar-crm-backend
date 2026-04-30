@@ -9,16 +9,21 @@ import {
   Param,
   BadRequestException,
   HttpCode,
+  Res,
 } from "@nestjs/common";
 import { ApiTags, ApiOperation } from "@nestjs/swagger";
 import { WebhooksService } from "./webhooks.service";
 import { Public } from "../auth/decorators/public.decorator";
 import { CreateWebhookConfigDto } from "./dto/webhook-config.dto";
+import { LeadsService } from "../leads/leads.service";
 
 @ApiTags("Webhooks")
 @Controller("webhooks")
 export class WebhooksController {
-  constructor(private webhooksService: WebhooksService) {}
+  constructor(
+    private webhooksService: WebhooksService,
+    private leadsService: LeadsService,
+  ) {}
 
   // ─── META: Verification (GET) ───
   @Public()
@@ -89,5 +94,30 @@ export class WebhooksController {
   @ApiOperation({ summary: "Remove a form from CRM" })
   async deleteConfig(@Param("id") id: string) {
     return this.webhooksService.deleteConfig(id);
+  }
+
+  // Landing page web hooks
+  @Public()
+  @Post("landing-page")
+  @HttpCode(200)
+  async landingPage(@Body() body: any) {
+    if (body.token !== process.env.WEBHOOK_TOKEN) {
+      throw new BadRequestException("Invalid token");
+    }
+    const systemUser = { id: null, role: "ADMIN", name: "Landing Page" };
+    await this.leadsService.create(
+      {
+        fullName: body.fullName,
+        phone: body.phone,
+        email: body.email,
+        country: body.country,
+        source: "WEBSITE",
+        priority: "WARM",
+        status: "NEW",
+        notes: body.notes ? [body.notes] : [],
+        category: "ADMISSION",
+      },
+      systemUser,
+    );
   }
 }

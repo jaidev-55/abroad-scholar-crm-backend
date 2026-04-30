@@ -4,9 +4,10 @@ import { WebhooksService } from "./webhooks.service";
 import { PrismaModule } from "../prisma/prisma.module";
 import { EmailModule } from "../email/email.module";
 import { ScheduleModule } from "@nestjs/schedule";
+import { LeadsModule } from "../leads/leads.module";
 
 @Module({
-  imports: [PrismaModule, EmailModule, ScheduleModule.forRoot()],
+  imports: [PrismaModule, EmailModule, ScheduleModule.forRoot(), LeadsModule],
   controllers: [WebhooksController],
   providers: [WebhooksService],
 })
