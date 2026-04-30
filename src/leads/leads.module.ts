@@ -10,5 +10,6 @@ import { NotificationsModule } from "../notifications/Notifications.module";
   imports: [PrismaModule, AuthModule, EmailModule, NotificationsModule],
   providers: [LeadsService],
   controllers: [LeadsController],
+  exports: [LeadsService],
 })
 export class LeadsModule {}

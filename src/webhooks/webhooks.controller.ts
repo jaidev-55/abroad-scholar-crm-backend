@@ -16,6 +16,7 @@ import { WebhooksService } from "./webhooks.service";
 import { Public } from "../auth/decorators/public.decorator";
 import { CreateWebhookConfigDto } from "./dto/webhook-config.dto";
 import { LeadsService } from "../leads/leads.service";
+import { LandingPageWebhookDto } from "./dto/landing-page.dto";
 
 @ApiTags("Webhooks")
 @Controller("webhooks")
@@ -100,7 +101,7 @@ export class WebhooksController {
   @Public()
   @Post("landing-page")
   @HttpCode(200)
-  async landingPage(@Body() body: any) {
+  async landingPage(@Body() body: LandingPageWebhookDto) {
     if (body.token !== process.env.WEBHOOK_TOKEN) {
       throw new BadRequestException("Invalid token");
     }
