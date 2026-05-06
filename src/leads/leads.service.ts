@@ -311,16 +311,18 @@ export class LeadsService {
 
     let assignedCounselorId = existingLead.counselorId;
 
-    if (dto.counselorId) {
+    const incomingCounselorId = dto.counselorId?.trim() || null;
+
+    if (incomingCounselorId) {
       const counselor = await this.prisma.user.findUnique({
-        where: { id: dto.counselorId },
+        where: { id: incomingCounselorId },
       });
 
       if (!counselor) {
         throw new BadRequestException("Invalid counselor ID");
       }
 
-      assignedCounselorId = dto.counselorId;
+      assignedCounselorId = incomingCounselorId;
     }
 
     if (
