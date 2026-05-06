@@ -417,6 +417,13 @@ export class LeadsService {
       throw new NotFoundException("Lead not found");
     }
 
+    // Blacklist phone so webhook cron never re-imports it
+    await this.prisma.deletedLeadPhone.upsert({
+      where: { phone: lead.phone },
+      update: { name: lead.fullName },
+      create: { phone: lead.phone, name: lead.fullName },
+    });
+
     await this.prisma.lead.delete({ where: { id } });
     return { message: "Lead deleted successfully" };
   }
@@ -428,7 +435,7 @@ export class LeadsService {
 
     const found = await this.prisma.lead.findMany({
       where: { id: { in: ids } },
-      select: { id: true },
+      select: { id: true, phone: true, fullName: true },
     });
 
     if (found.length !== ids.length) {
@@ -436,6 +443,17 @@ export class LeadsService {
       const missing = ids.filter((id) => !foundIds.includes(id));
       throw new NotFoundException(`Leads not found: ${missing.join(", ")}`);
     }
+
+    // Blacklist all phones so webhook cron never re-imports them
+    await Promise.all(
+      found.map((l) =>
+        this.prisma.deletedLeadPhone.upsert({
+          where: { phone: l.phone },
+          update: { name: l.fullName },
+          create: { phone: l.phone, name: l.fullName },
+        }),
+      ),
+    );
 
     const result = await this.prisma.lead.deleteMany({
       where: { id: { in: ids } },

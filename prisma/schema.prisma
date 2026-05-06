@@ -228,5 +228,12 @@ model CallLog {
 }
 
 
+model DeletedLeadPhone {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+}
+
 
 

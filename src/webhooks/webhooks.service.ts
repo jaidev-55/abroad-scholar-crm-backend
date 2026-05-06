@@ -288,6 +288,14 @@ export class WebhooksService {
       return;
     }
 
+    const isBlacklisted = await this.prisma.deletedLeadPhone.findUnique({
+      where: { phone: cleanPhone },
+    });
+    if (isBlacklisted) {
+      this.logger.warn(`Skipping blacklisted (deleted) lead: ${cleanPhone}`);
+      return;
+    }
+
     const counselorId = await this.getNextCounselor();
     if (!counselorId) {
       this.logger.error("No counselors available for auto-assignment");
