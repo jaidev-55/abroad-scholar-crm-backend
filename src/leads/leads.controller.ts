@@ -65,9 +65,14 @@ export class LeadsController {
 
   // Add note to a lead
   @ApiOperation({ summary: "Add note to lead" })
+  @UseGuards(JwtAuthGuard)
   @Post(":id/notes")
-  addNote(@Param("id") id: string, @Body() dto: CreateNoteDto) {
-    return this.leadsService.addNote(id, dto);
+  addNote(
+    @Param("id") id: string,
+    @Body() dto: CreateNoteDto,
+    @Req() req: any,
+  ) {
+    return this.leadsService.addNote(id, dto, req.user);
   }
 
   // Fetch all leads with optional filters
@@ -92,6 +97,18 @@ export class LeadsController {
     enum: ["ACADEMIC", "ADMISSION"],
     description: "Filter by lead category",
   })
+  @ApiQuery({
+    name: "pipelineStatus",
+    required: false,
+    enum: [
+      "COUNSELLING_COMPLETED",
+      "FOLLOW_UP",
+      "ACTIVE_PIPELINE",
+      "DOCS_PENDING",
+      "NO_RESPONSE_1ST_CALL",
+    ],
+    description: "Filter by pipeline status",
+  })
   @Get()
   findAll(
     @Query("search") search?: string,
@@ -107,7 +124,8 @@ export class LeadsController {
     @Query("endDate") endDate?: string,
     @Query("page") page?: number,
     @Query("limit") limit?: number,
-    @Query("category") category?: string, // ← new
+    @Query("category") category?: string,
+    @Query("pipelineStatus") pipelineStatus?: string,
     @Req() req?: Request,
   ) {
     return this.leadsService.findAll(
@@ -125,7 +143,8 @@ export class LeadsController {
         endDate,
         page,
         limit,
-        category, // ← new
+        category,
+        pipelineStatus, // ← new
       },
       req?.user,
     );

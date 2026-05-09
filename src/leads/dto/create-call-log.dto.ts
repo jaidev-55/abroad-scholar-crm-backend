@@ -17,11 +17,26 @@ export enum CallOutcome {
   VOICEMAIL = "VOICEMAIL",
 }
 
+// Pipeline status set after a call — shown on the Kanban card
+export enum PipelineStatus {
+  COUNSELLING_COMPLETED = "COUNSELLING_COMPLETED",
+  FOLLOW_UP = "FOLLOW_UP",
+  ACTIVE_PIPELINE = "ACTIVE_PIPELINE",
+  DOCS_PENDING = "DOCS_PENDING",
+  NO_RESPONSE_1ST_CALL = "NO_RESPONSE_1ST_CALL",
+}
+
 // DTO used to log a call activity for a lead
 export class CreateCallLogDto {
   @ApiProperty({ enum: CallOutcome })
   @IsEnum(CallOutcome)
   outcome!: CallOutcome;
+
+  // Pipeline status to update on the lead card
+  @ApiPropertyOptional({ enum: PipelineStatus })
+  @IsOptional()
+  @IsEnum(PipelineStatus)
+  pipelineStatus?: PipelineStatus;
 
   // Optional notes about the call conversation
   @ApiPropertyOptional({ example: "Student interested in UK intake" })

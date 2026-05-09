@@ -25,6 +25,7 @@ model User {
   isVerified   Boolean        @default(false)
   leads        Lead[]
   callLogs   CallLog[]
+  leadNotes    LeadNote[]
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   LeadActivity LeadActivity[]
@@ -75,13 +76,24 @@ enum LostReason {
   OTHER
 }
 
+// Pipeline Status (set after a call, shown on Kanban card) 
+enum PipelineStatus {
+  COUNSELLING_COMPLETED
+  FOLLOW_UP
+  ACTIVE_PIPELINE
+  DOCS_PENDING
+  NO_RESPONSE_1ST_CALL
+}
+
 model LeadNote {
   id        String   @id @default(uuid())
   content   String
   leadId    String
+  userId    String? 
   createdAt DateTime @default(now())
 
   lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id])
 }
 
 // LEAD MODEL //
@@ -109,6 +121,7 @@ model Lead {
 callLogs   CallLog[]
   // Lost reason 
   lostReason   LostReason?
+  pipelineStatus  PipelineStatus?
 
   // Relations
   notes      LeadNote[]
@@ -127,6 +140,7 @@ callLogs   CallLog[]
   @@index([followUpDate])
   @@index([createdAt])
   @@index([lostReason])
+  @@index([pipelineStatus])
   @@index([category])
 }
 

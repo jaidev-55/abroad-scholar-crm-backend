@@ -210,6 +210,7 @@ export class LeadsService {
     if (status) where.status = status;
     if (lostReason) where.lostReason = lostReason;
     if (filters.category) where.category = filters.category;
+    if (filters.pipelineStatus) where.pipelineStatus = filters.pipelineStatus;
 
     if (startDate && endDate) {
       where.createdAt = {
@@ -230,7 +231,10 @@ export class LeadsService {
         where,
         include: {
           counselor: true,
-          notes: { orderBy: { createdAt: "desc" } },
+          notes: {
+            include: { user: { select: { id: true, name: true } } },
+            orderBy: { createdAt: "desc" },
+          },
         },
         orderBy: { createdAt: "desc" },
       });
@@ -252,7 +256,10 @@ export class LeadsService {
         where,
         include: {
           counselor: true,
-          notes: { orderBy: { createdAt: "desc" } },
+          notes: {
+            include: { user: { select: { id: true, name: true } } },
+            orderBy: { createdAt: "desc" },
+          },
         },
         skip,
         take: Number(limit),
@@ -277,7 +284,10 @@ export class LeadsService {
       where: { id },
       include: {
         counselor: true,
-        notes: { orderBy: { createdAt: "desc" } },
+        notes: {
+          include: { user: { select: { id: true, name: true } } },
+          orderBy: { createdAt: "desc" },
+        },
       },
     });
 
@@ -542,11 +552,12 @@ export class LeadsService {
     await this.prisma.leadActivity.create({
       data: {
         type: "CALL",
-        message: `Call logged - ${dto.outcome}`,
+        message: `Call logged - ${dto.outcome}${dto.pipelineStatus ? ` | Pipeline: ${dto.pipelineStatus}` : ""}`,
         leadId,
         userId: user.id,
         meta: {
           outcome: dto.outcome,
+          pipelineStatus: dto.pipelineStatus ?? null,
           notes: dto.notes ?? null,
           duration: dto.duration ?? null,
           rating: dto.rating ?? null,
@@ -555,10 +566,15 @@ export class LeadsService {
       },
     });
 
-    if (followUpDate) {
+    // Build the lead update payload
+    const leadUpdateData: any = {};
+    if (followUpDate) leadUpdateData.followUpDate = followUpDate;
+    if (dto.pipelineStatus) leadUpdateData.pipelineStatus = dto.pipelineStatus;
+
+    if (Object.keys(leadUpdateData).length > 0) {
       await this.prisma.lead.update({
         where: { id: leadId },
-        data: { followUpDate },
+        data: leadUpdateData,
       });
     }
 
@@ -648,17 +664,23 @@ export class LeadsService {
     return updatedLead;
   }
 
-  async addNote(leadId: string, dto: any) {
-    const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
+  async addNote(leadId: string, dto: any, user?: any) {
+    user = user ? { ...user, id: user.id ?? user.sub ?? user.userId } : null;
 
+    const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
     if (!lead) throw new NotFoundException("Lead not found");
 
     const note = await this.prisma.leadNote.create({
-      data: { content: dto.content, leadId },
+      data: { content: dto.content, leadId, userId: user?.id ?? null },
     });
 
     await this.prisma.leadActivity.create({
-      data: { type: "NOTE", message: "Note added", leadId },
+      data: {
+        type: "NOTE",
+        message: "Note added",
+        leadId,
+        userId: user?.id ?? null,
+      },
     });
 
     return note;

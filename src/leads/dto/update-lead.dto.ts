@@ -16,6 +16,7 @@ import {
   LeadPriority,
   LostReason,
   LeadCategory,
+  PipelineStatus,
 } from "@prisma/client";
 
 class UpdateNoteDto {
@@ -91,12 +92,20 @@ export class UpdateLeadDto {
   @ApiPropertyOptional({
     enum: ["ACADEMIC", "ADMISSION"],
     example: "ADMISSION",
-    description:
-      "Lead category — ACADEMIC (IELTS/PTE) or ADMISSION (University)",
   })
   @IsOptional()
   @IsEnum(LeadCategory)
   category?: LeadCategory;
+
+  // ── Pipeline Status ───────────────────────────────────────────────────────
+  @ApiPropertyOptional({
+    enum: PipelineStatus,
+    example: "FOLLOW_UP",
+    description: "Pipeline status set after a call",
+  })
+  @IsOptional()
+  @IsEnum(PipelineStatus)
+  pipelineStatus?: PipelineStatus;
 
   @ApiPropertyOptional({
     type: [UpdateNoteDto],
