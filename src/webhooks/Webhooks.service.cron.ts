@@ -274,14 +274,16 @@ export class WebhooksService {
 
     if (existing) {
       this.logger.warn(`Duplicate lead skipped: ${cleanPhone}`);
-      await this.prisma.leadActivity.create({
-        data: {
-          type: "NOTE",
-          message: `Duplicate ${data.source} lead received - skipped`,
-          leadId: existing.id,
-          meta: data.meta,
-        },
-      });
+      if (!data.skipEmail) {
+        await this.prisma.leadActivity.create({
+          data: {
+            type: "NOTE",
+            message: `Duplicate ${data.source} lead received - skipped`,
+            leadId: existing.id,
+            meta: data.meta,
+          },
+        });
+      }
       return;
     }
 
