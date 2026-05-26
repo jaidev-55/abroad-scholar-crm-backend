@@ -10,6 +10,7 @@ import { WebhooksModule } from "./webhooks/webhooks.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { NotificationsModule } from "./notifications/Notifications.module";
 import { CallOutcomesModule } from "./dashboard/Call outcomes.module";
+import { LostLeadsModule } from "./leads/lost-leads/lost-leads.module";
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { CallOutcomesModule } from "./dashboard/Call outcomes.module";
     PrismaModule,
     AuthModule,
     LeadsModule,
+    LostLeadsModule,
     EmailTemplatesModule,
     DashboardModule,
     CallOutcomesModule,

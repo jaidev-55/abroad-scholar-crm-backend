@@ -74,6 +74,13 @@ enum LostReason {
   DUPLICATE_LEAD
   VISA_REJECTED
   OTHER
+  DIRECT_ADMISSION
+  ANOTHER_CONSULTANCY
+  NOT_RESPONDING
+  DEFERRED_INTAKE
+  CHANGED_COUNTRY
+  FAMILY_DECISION
+  VISA_REJECTION
 }
 
 // Pipeline Status (set after a call, shown on Kanban card) 
@@ -122,6 +129,7 @@ callLogs   CallLog[]
   // Lost reason 
   lostReason   LostReason?
   pipelineStatus  PipelineStatus?
+  reactivatedCount Int @default(0)
 
   // Relations
   notes      LeadNote[]
