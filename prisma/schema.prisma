@@ -26,6 +26,7 @@ model User {
   leads        Lead[]
   callLogs   CallLog[]
   leadNotes    LeadNote[]
+  ieltsTracking IeltsTracking[]
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   LeadActivity LeadActivity[]
@@ -255,6 +256,93 @@ model DeletedLeadPhone {
   phone     String   @unique
   name      String?
   createdAt DateTime @default(now())
+}
+
+
+enum IeltsStatus {
+  NOT_STARTED
+  PREPARING
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum IeltsExamType {
+  ACADEMIC
+  GENERAL
+}
+
+enum IeltsTestType {
+  OFFICIAL_EXAM
+  MOCK_TEST
+  PRACTICE
+}
+
+model IeltsTracking {
+  id               String        @id @default(uuid())
+
+  // Student Info
+  studentName      String
+  country          String?
+
+  // Exam Details
+  examType         IeltsExamType @default(ACADEMIC)
+  status           IeltsStatus   @default(NOT_STARTED)
+  examDate         DateTime?
+  registrationId   String?
+  targetUniversity String?
+
+  // Counselor
+   counselorId      String?
+   counselor        User?        @relation(fields: [counselorId], references: [id])
+
+
+  // Target Scores
+  requiredScore    Float?
+  targetL          Float?
+  targetR          Float?
+  targetW          Float?
+  targetS          Float?
+  targetOA         Float?
+
+  // Current Scores (latest)
+  currentL         Float?
+  currentR         Float?
+  currentW         Float?
+  currentS         Float?
+  currentOA        Float?
+
+  // Notes
+  notes            String?
+
+  // Score History
+  scoreHistory     IeltsScoreHistory[]
+  
+  // Attempts count
+  attempts         Int           @default(0)
+  
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([status])
+  @@index([counselorId])
+  @@index([examDate])
+}
+
+model IeltsScoreHistory {
+  id          String        @id @default(uuid())
+  trackingId  String
+  tracking    IeltsTracking @relation(fields: [trackingId], references: [id], onDelete: Cascade)
+  
+  listening   Float?
+  reading     Float?
+  writing     Float?
+  speaking    Float?
+  overall     Float?
+  testType    IeltsTestType @default(OFFICIAL_EXAM)
+  notes       String?
+  
+  createdAt   DateTime      @default(now())
 }
 
 

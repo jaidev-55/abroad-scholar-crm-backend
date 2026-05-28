@@ -11,6 +11,7 @@ import { DashboardModule } from "./dashboard/dashboard.module";
 import { NotificationsModule } from "./notifications/Notifications.module";
 import { CallOutcomesModule } from "./dashboard/Call outcomes.module";
 import { LostLeadsModule } from "./leads/lost-leads/lost-leads.module";
+import { IeltsModule } from "./ielts/ielts.module";
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { LostLeadsModule } from "./leads/lost-leads/lost-leads.module";
     NotificationsModule,
     EmailModule,
     WebhooksModule,
+    IeltsModule,
   ],
   controllers: [AppController],
 })
