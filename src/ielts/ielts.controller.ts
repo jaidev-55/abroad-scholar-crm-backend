@@ -10,14 +10,15 @@ import {
   Query,
   UseGuards,
   Request,
+  ForbiddenException,
 } from "@nestjs/common";
 import { ApiTags, ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { IeltsService } from "./ielts.service";
 import { CreateIeltsDto } from "./dto/create-ielts.dto";
-
 import { IeltsQueryDto } from "./dto/ielts-query.dto";
 import { UpdateScoresDto } from "./dto/update-ielts.dto";
+import { UserRole } from "@prisma/client";
 
 @ApiTags("IELTS")
 @ApiBearerAuth()
@@ -63,8 +64,11 @@ export class IeltsController {
   }
 
   @Delete(":id")
-  @ApiOperation({ summary: "Delete IELTS record" })
-  delete(@Param("id") id: string) {
+  @ApiOperation({ summary: "Delete IELTS record — Admin only" })
+  delete(@Param("id") id: string, @Request() req: any) {
+    if (req.user.role !== UserRole.ADMIN) {
+      throw new ForbiddenException("Only admins can delete IELTS records");
+    }
     return this.ieltsService.delete(id);
   }
 }
