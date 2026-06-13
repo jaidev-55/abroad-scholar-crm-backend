@@ -7,33 +7,19 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// USER SECTION //
 
-// Defines user roles in the system
+// ENUMS — USER & AUTH
+
 enum UserRole {
   ADMIN
   COUNSELOR
 }
 
-// User table (Admin & Counselors)
-model User {
-  id           String         @id @default(uuid())
-  name         String
-  email        String         @unique
-  password     String
-  role         UserRole       @default(COUNSELOR)
-  isVerified   Boolean        @default(false)
-  leads        Lead[]
-  callLogs   CallLog[]
-  leadNotes    LeadNote[]
-  ieltsTracking IeltsTracking[]
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  LeadActivity LeadActivity[]
-}
 
 
-// Lead stages (Pipeline columns)
+// ENUMS — LEADS
+
+
 enum LeadStatus {
   NEW
   IN_PROGRESS
@@ -41,13 +27,11 @@ enum LeadStatus {
   LOST
 }
 
-
 enum LeadCategory {
-    ACADEMIC
-    ADMISSION
+  ACADEMIC
+  ADMISSION
 }
 
-// Source of the lead (for analytics & marketing tracking)
 enum LeadSource {
   INSTAGRAM
   WEBSITE
@@ -59,13 +43,12 @@ enum LeadSource {
   WHATSAPP
 }
 
-// Priority level for counselor attention
 enum LeadPriority {
   HOT
   WARM
   COLD
 }
-// Lost lead reasons
+
 enum LostReason {
   NO_RESPONSE
   NOT_INTERESTED
@@ -84,86 +67,12 @@ enum LostReason {
   VISA_REJECTION
 }
 
-// Pipeline Status (set after a call, shown on Kanban card) 
 enum PipelineStatus {
   COUNSELLING_COMPLETED
   FOLLOW_UP
   ACTIVE_PIPELINE
   DOCS_PENDING
   NO_RESPONSE_1ST_CALL
-}
-
-model LeadNote {
-  id        String   @id @default(uuid())
-  content   String
-  leadId    String
-  userId    String? 
-  createdAt DateTime @default(now())
-
-  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  user User? @relation(fields: [userId], references: [id])
-}
-
-// LEAD MODEL //
-model Lead {
-  id String @id @default(uuid())
-
-  // Personal Info
-  fullName   String
-  phone      String  @unique
-  email      String?
-  country    String?
-  ieltsScore Float?
-
-  // Classification Details
-  status   LeadStatus   @default(NEW)
-  source   LeadSource
-  priority LeadPriority @default(WARM)
-  category  LeadCategory?
-
-  // Assignment & Follow-up
-  counselorId  String?
-  counselor    User?     @relation(fields: [counselorId], references: [id])
-  followUpDate DateTime?
-
-callLogs   CallLog[]
-  // Lost reason 
-  lostReason   LostReason?
-  pipelineStatus  PipelineStatus?
-  reactivatedCount Int @default(0)
-
-  // Relations
-  notes      LeadNote[]
-  activities LeadActivity[]
-
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Indexes
-  @@index([status])
-  @@index([source])
-  @@index([priority])
-  @@index([country])
-  @@index([counselorId])
-  @@index([followUpDate])
-  @@index([createdAt])
-  @@index([lostReason])
-  @@index([pipelineStatus])
-  @@index([category])
-}
-
-// Lead Activity Timeline
-model LeadActivity {
-  id        String       @id @default(uuid())
-  type      ActivityType
-  message   String
-  meta      Json?
-  leadId    String
-  lead      Lead         @relation(fields: [leadId], references: [id],onDelete: Cascade)
-  userId    String?
-  user      User?        @relation(fields: [userId], references: [id])
-  createdAt DateTime     @default(now())
 }
 
 enum ActivityType {
@@ -174,56 +83,6 @@ enum ActivityType {
   EDIT
 }
 
-// OTP Verification
-model OtpVerification {
-  id        String    @id @default(uuid())
-  email     String
-  otp       String
-  name      String    @default("")  
-  password  String    @default("")   
-  role      UserRole  @default(COUNSELOR)
-  expiresAt DateTime
-  createdAt DateTime  @default(now())
-
-  @@index([email])
-}
-
-
-// Password Reset
-model PasswordReset {
-  id        String   @id @default(uuid())
-  email     String
-  otp       String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-}
-
-
-// Email Templates
-model EmailTemplate {
-  id         String   @id @default(uuid())
-  name       String
-  subject    String
-  content    String
-  attachment String? 
-  createdAt  DateTime @default(now())
-}
-
-
-// Webhook configuration for Meta/Google ad forms
-model WebhookConfig {
-id String @id @default(uuid())
-platform String 
-formId String @unique
-formName String
-isActive Boolean @default(true)
-category  LeadCategory?
-createdAt DateTime @default(now())
-updatedAt DateTime @updatedAt
-}
-
-
-
 enum CallOutcome {
   INTERESTED
   CONVERTED
@@ -233,30 +92,9 @@ enum CallOutcome {
   VOICEMAIL
 }
 
-model CallLog {
-  id         String      @id @default(uuid())
-  outcome    CallOutcome
-  leadId     String
-  lead       Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  counselorId String?
-  counselor  User?       @relation(fields: [counselorId], references: [id])
-  notes      String?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-
-  @@index([outcome])
-  @@index([leadId])
-  @@index([counselorId])
-  @@index([createdAt])
-}
 
 
-model DeletedLeadPhone {
-  id        String   @id @default(cuid())
-  phone     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-}
+// ENUMS — IELTS
 
 
 enum IeltsStatus {
@@ -278,14 +116,231 @@ enum IeltsTestType {
   PRACTICE
 }
 
+
+
+// ENUMS — ENROLLED STUDENTS
+
+enum EnrollmentStage {
+  LEAD_CONVERTED
+  APPLICATION_SUBMITTED
+  OFFER_RECEIVED 
+  FEE_PAID
+  CAS_I20_ISSUED
+  VISA_FILED
+  VISA_APPROVED
+  TRAVEL_DONE
+}
+
+enum VisaStatus {
+  NOT_STARTED
+  FILED
+  IN_PROGRESS
+  APPROVED
+  REJECTED
+}
+
+enum FeeStatus {
+  PENDING
+  PARTIAL
+  PAID
+}
+
+enum RiskType {
+  VISA_DEADLINE
+  FEE_OVERDUE
+  DOCS_MISSING
+  INTAKE_APPROACHING
+  VISA_REJECTED
+  CAS_PENDING
+}
+
+enum EnrollmentActivityType {
+  ENROLLED
+  STAGE_CHANGE
+  VISA_UPDATE
+  FEE_PAYMENT
+  DOCUMENT_UPLOAD
+  RISK_FLAGGED
+  RISK_RESOLVED
+  NOTE
+  EDIT
+}
+
+
+enum VisaType {
+  TIER_4_UK
+  F1_USA
+  STUDY_PERMIT_CA
+  SUBCLASS_500_AU
+  STUDENT_DE
+  STUDENT_IE
+  STUDENT_NZ
+  OTHER
+}
+
+enum DocumentStatus {
+  UPLOADED
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+
+enum CommissionStatus {
+  PENDING
+  PARTIAL
+  PAID
+}
+
+
+
+// MODEL — USER (Admin & Counselors)
+
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole @default(COUNSELOR)
+  isVerified Boolean @default(false)
+
+  // Lead relations
+  leads        Lead[]
+  callLogs     CallLog[]
+  leadNotes    LeadNote[]
+  LeadActivity LeadActivity[]
+
+  // IELTS relations
+  ieltsTracking IeltsTracking[]
+
+  // Enrolled student relations
+  enrolledStudents     EnrolledStudent[]
+  enrollmentActivities EnrollmentActivity[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  
+}
+
+
+// MODELS — LEADS
+
+
+model Lead {
+  id String @id @default(uuid())
+
+  // Personal info
+  fullName   String
+  phone      String       @unique
+  email      String?
+  country    String?
+  ieltsScore Float?
+
+  // Classification
+  status   LeadStatus   @default(NEW)
+  source   LeadSource
+  priority LeadPriority @default(WARM)
+  category LeadCategory?
+
+  // Assignment & follow-up
+  counselorId  String?
+  counselor    User?     @relation(fields: [counselorId], references: [id])
+  followUpDate DateTime?
+
+  // Call logs
+  callLogs CallLog[]
+
+  // Lost reason & pipeline
+  lostReason       LostReason?
+  pipelineStatus   PipelineStatus?
+  reactivatedCount Int @default(0)
+
+  // Relations
+  notes      LeadNote[]
+  activities LeadActivity[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([source])
+  @@index([priority])
+  @@index([country])
+  @@index([counselorId])
+  @@index([followUpDate])
+  @@index([createdAt])
+  @@index([lostReason])
+  @@index([pipelineStatus])
+  @@index([category])
+}
+
+model LeadNote {
+  id      String @id @default(uuid())
+  content String
+  leadId  String
+  userId  String?
+
+  lead Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model LeadActivity {
+  id      String       @id @default(uuid())
+  type    ActivityType
+  message String
+  meta    Json?
+  leadId  String
+  userId  String?
+
+  lead Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model CallLog {
+  id          String      @id @default(uuid())
+  outcome     CallOutcome
+  leadId      String
+  counselorId String?
+  notes       String?
+
+  lead      Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  counselor User? @relation(fields: [counselorId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([outcome])
+  @@index([leadId])
+  @@index([counselorId])
+  @@index([createdAt])
+}
+
+model DeletedLeadPhone {
+  id    String  @id @default(cuid())
+  phone String  @unique
+  name  String?
+
+  createdAt DateTime @default(now())
+}
+
+
+// MODELS — IELTS TRACKING
+
+
 model IeltsTracking {
-  id               String        @id @default(uuid())
+  id String @id @default(uuid())
 
-  // Student Info
-  studentName      String
-  country          String?
+  // Student info
+  studentName String
+  country     String?
 
-  // Exam Details
+  // Exam details
   examType         IeltsExamType @default(ACADEMIC)
   status           IeltsStatus   @default(NOT_STARTED)
   examDate         DateTime?
@@ -293,36 +348,31 @@ model IeltsTracking {
   targetUniversity String?
 
   // Counselor
-   counselorId      String?
-   counselor        User?        @relation(fields: [counselorId], references: [id])
+  counselorId String?
+  counselor   User?  @relation(fields: [counselorId], references: [id])
 
+  // Target scores
+  requiredScore Float?
+  targetL       Float?
+  targetR       Float?
+  targetW       Float?
+  targetS       Float?
+  targetOA      Float?
 
-  // Target Scores
-  requiredScore    Float?
-  targetL          Float?
-  targetR          Float?
-  targetW          Float?
-  targetS          Float?
-  targetOA         Float?
+  // Current scores (latest)
+  currentL  Float?
+  currentR  Float?
+  currentW  Float?
+  currentS  Float?
+  currentOA Float?
 
-  // Current Scores (latest)
-  currentL         Float?
-  currentR         Float?
-  currentW         Float?
-  currentS         Float?
-  currentOA        Float?
+  // Notes & history
+  notes        String?
+  scoreHistory IeltsScoreHistory[]
+  attempts     Int @default(0)
 
-  // Notes
-  notes            String?
-
-  // Score History
-  scoreHistory     IeltsScoreHistory[]
-  
-  // Attempts count
-  attempts         Int           @default(0)
-  
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status])
   @@index([counselorId])
@@ -330,20 +380,314 @@ model IeltsTracking {
 }
 
 model IeltsScoreHistory {
-  id          String        @id @default(uuid())
-  trackingId  String
-  tracking    IeltsTracking @relation(fields: [trackingId], references: [id], onDelete: Cascade)
-  
-  listening   Float?
-  reading     Float?
-  writing     Float?
-  speaking    Float?
-  overall     Float?
-  testType    IeltsTestType @default(OFFICIAL_EXAM)
-  notes       String?
-  
-  createdAt   DateTime      @default(now())
+  id         String        @id @default(uuid())
+  trackingId String
+  listening  Float?
+  reading    Float?
+  writing    Float?
+  speaking   Float?
+  overall    Float?
+  testType   IeltsTestType @default(OFFICIAL_EXAM)
+  notes      String?
+
+  tracking IeltsTracking @relation(fields: [trackingId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
 }
 
 
 
+// MODELS — ENROLLED STUDENTS
+
+
+model EnrolledStudent {
+  id        String @id @default(uuid())
+  studentId String @unique 
+
+  // Personal info 
+  fullName   String
+  phone      String      @unique
+  email      String
+  ieltsScore Float?
+  source     LeadSource?
+
+  // Academic details 
+  country    String
+  university String
+  course     String
+  intakeDate DateTime
+
+  // Counselor assignment
+  counselorId String?
+  counselor   User?  @relation(fields: [counselorId], references: [id])
+
+  // Pipeline stage & visa 
+  stage      EnrollmentStage @default(LEAD_CONVERTED)
+
+  visaStatus VisaStatus      @default(NOT_STARTED)
+  visaAppDate DateTime?
+  visaDecDate DateTime?
+  casRef      String?
+
+  // Financial 
+  totalFee    Float     @default(0)
+  feePaid     Float     @default(0)
+  feeStatus   FeeStatus @default(PENDING)
+  feeCurrency String    @default("USD")
+
+  // Travel
+  travelDate  DateTime?
+  travelReady Boolean @default(false)
+
+  // General
+  notes  String?
+  leadId String? @unique 
+
+  // Relations
+  visaDetail    VisaDetail?
+  feePayments   FeePayment[]
+  preDeparture  PreDepartureItem[]
+  commission    Commission?
+  risks         EnrollmentRisk[]
+  documents     EnrollmentDocument[]
+  activities    EnrollmentActivity[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([stage])
+  @@index([visaStatus])
+  @@index([feeStatus])
+  @@index([country])
+  @@index([counselorId])
+  @@index([intakeDate])
+  @@index([createdAt])
+}
+
+model EnrollmentRisk {
+  id         String   @id @default(uuid())
+  type       RiskType
+  message    String
+  isResolved Boolean  @default(false)
+  resolvedAt DateTime?
+
+  studentId String
+  student   EnrolledStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([studentId])
+  @@index([type])
+  @@index([isResolved])
+}
+
+model EnrollmentDocument {
+  id       String  @id @default(uuid())
+  name     String
+  fileUrl  String
+  fileType String?
+
+  status     DocumentStatus  @default(UPLOADED)
+  expiryDate DateTime? 
+  notes      String? 
+
+  studentId String
+  student   EnrolledStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  uploadedAt DateTime @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([studentId])
+  @@index([status])
+}
+
+model EnrollmentActivity {
+  id      String                 @id @default(uuid())
+  type    EnrollmentActivityType
+  message String
+  meta    Json?
+
+  studentId String
+  student   EnrolledStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([studentId])
+  @@index([createdAt])
+}
+
+
+model VisaDetail {
+  id              String     @id @default(uuid())
+
+  // Passport
+  passportNumber  String?
+  passportExpiry  DateTime?
+
+  // Visa info
+  visaType        VisaType?
+  visaStatus      VisaStatus @default(NOT_STARTED)
+
+  // Processing dates
+  filingDate      DateTime?
+  biometricDate   DateTime?
+  interviewDate   DateTime?
+  decisionDate    DateTime?
+
+  // Link to student
+  studentId      String    @unique
+  student        EnrolledStudent   @relation(fields: [studentId], references: [id],onDelete: Cascade)
+
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([studentId])
+  @@index([visaStatus])
+}
+
+
+
+// Fee Payment Line Items
+enum PaymentMode {
+  BANK_TRANSFER
+  ONLINE_PAYMENT
+  CASH
+  CHEQUE
+  CARD
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  REFUNDED
+}
+
+model FeePayment {
+  id      String     @id @default(uuid())
+  type    String
+  amount  Float
+  dueDate DateTime?
+  status   PaymentStatus @default(PENDING)
+  paymentMode PaymentMode? 
+  paidDate DateTime?
+  notes    String?
+
+  studentId     String
+  student       EnrolledStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([studentId])
+  @@index([status])
+}
+
+// Pre-Departure Checklist
+
+model PreDepartureItem {
+id            String    @id @default(uuid())
+taskName      String
+category      String?
+isCompleted   Boolean   @default(false)
+completedAt   DateTime?
+attachmentUrl String?
+notes         String?
+
+studentId     String
+student       EnrolledStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+createdAt     DateTime  @default(now())
+updatedAt     DateTime  @updatedAt
+
+ @@index([studentId])
+}
+
+// Commission Tracking
+
+model Commission {
+id               String           @id @default(uuid())
+universityRate   Float            @default(0)
+subAgentRate     Float            @default(0)
+expectedAmount   Float            @default(0)
+receivedAmount   Float            @default(0)
+status           CommissionStatus @default(PENDING)
+agreementUrl     String?
+notes            String?
+
+ // Payment history
+ payments         CommissionPayment[]
+ studentId        String           @unique
+ student          EnrolledStudent  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+ createdAt        DateTime         @default(now())
+ updatedAt        DateTime         @updatedAt
+
+ @@index([studentId])
+ @@index([status])
+
+}
+
+// Commission Payment Records
+model CommissionPayment {
+  id             String     @id @default(uuid())
+  amount         Float
+  notes          String?
+  commissionId   String
+  commission     Commission @relation(fields: [commissionId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime   @default(now())
+
+  @@index([commissionId])
+
+}
+
+// MODELS — AUTH & SYSTEM
+
+model OtpVerification {
+  id        String   @id @default(uuid())
+  email     String
+  otp       String
+  name      String   @default("")
+  password  String   @default("")
+  role      UserRole @default(COUNSELOR)
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  email     String
+  otp       String
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+}
+
+model EmailTemplate {
+  id         String  @id @default(uuid())
+  name       String
+  subject    String
+  content    String
+  attachment String?
+
+  createdAt DateTime @default(now())
+}
+
+model WebhookConfig {
+  id       String  @id @default(uuid())
+  platform String
+  formId   String  @unique
+  formName String
+  isActive Boolean      @default(true)
+  category LeadCategory?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

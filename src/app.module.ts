@@ -12,6 +12,7 @@ import { NotificationsModule } from "./notifications/Notifications.module";
 import { CallOutcomesModule } from "./dashboard/Call outcomes.module";
 import { LostLeadsModule } from "./leads/lost-leads/lost-leads.module";
 import { IeltsModule } from "./ielts/ielts.module";
+import { EnrolledModule } from "./enrolled/Enrolled.module";
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { IeltsModule } from "./ielts/ielts.module";
     EmailModule,
     WebhooksModule,
     IeltsModule,
+    EnrolledModule,
   ],
   controllers: [AppController],
 })
