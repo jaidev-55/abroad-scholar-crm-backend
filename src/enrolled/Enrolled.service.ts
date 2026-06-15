@@ -21,6 +21,9 @@ import {
   UpdateCommissionDto,
   RecordCommissionPaymentDto,
 } from "./dto/Commission.dto";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { join, extname } from "path";
+import { randomUUID } from "crypto";
 import { UploadDocumentDto, UpdateDocumentDto } from "./dto/Document.dto";
 import {
   CreateFeePaymentDto,
@@ -305,10 +308,13 @@ export class EnrolledService {
       update: data,
     });
 
-    if (dto.visaStatus) {
+    if (dto.visaStatus || dto.casRef) {
       await this.prisma.enrolledStudent.update({
         where: { id: studentId },
-        data: { visaStatus: dto.visaStatus },
+        data: {
+          ...(dto.visaStatus ? { visaStatus: dto.visaStatus } : {}),
+          ...(dto.casRef ? { casRef: dto.casRef } : {}),
+        },
       });
     }
 
@@ -321,6 +327,8 @@ export class EnrolledService {
         userId,
       },
     });
+
+    await this.autoDetectRisks(studentId);
 
     return visa;
   }
@@ -866,7 +874,12 @@ export class EnrolledService {
 
   // UPDATE STAGE (Dedicated endpoint for pipeline)
 
-  async updateStage(id: string, stage: EnrollmentStage, userId?: string) {
+  async updateStage(
+    id: string,
+    stage: EnrollmentStage,
+    userId?: string,
+    note?: string,
+  ) {
     const student = await this.prisma.enrolledStudent.findUnique({
       where: { id },
     });
@@ -881,13 +894,17 @@ export class EnrolledService {
       },
     });
 
+    const activityMessage = note
+      ? `Stage changed from ${student.stage} to ${stage} — ${note}`
+      : `Stage changed from ${student.stage} to ${stage}`;
+
     await this.prisma.enrollmentActivity.create({
       data: {
         type: "STAGE_CHANGE",
-        message: `Stage changed from ${student.stage} to ${stage}`,
+        message: activityMessage,
         studentId: id,
         userId,
-        meta: { previousStage: student.stage, newStage: stage },
+        meta: { previousStage: student.stage, newStage: stage, note },
       },
     });
 
@@ -895,7 +912,62 @@ export class EnrolledService {
 
     return updated;
   }
+  async createDocumentWithFile(
+    studentId: string,
+    file: Express.Multer.File,
+    name: string,
+    expiryDate?: string,
+    notes?: string,
+    userId?: string,
+  ) {
+    const student = await this.prisma.enrolledStudent.findUnique({
+      where: { id: studentId },
+    });
+    if (!student) throw new NotFoundException("Student not found");
+    if (!file) throw new BadRequestException("No file uploaded");
 
+    // Create upload directory
+    const uploadDir = join(
+      process.cwd(),
+      "uploads",
+      "documents",
+      student.studentId,
+    );
+    if (!existsSync(uploadDir)) {
+      mkdirSync(uploadDir, { recursive: true });
+    }
+
+    // Save with UUID filename
+    const ext = extname(file.originalname).toLowerCase();
+    const safeFilename = `${randomUUID()}${ext}`;
+    const filePath = join(uploadDir, safeFilename);
+    writeFileSync(filePath, file.buffer);
+
+    // Store relative path in DB
+    const fileUrl = `/uploads/documents/${student.studentId}/${safeFilename}`;
+
+    const doc = await this.prisma.enrollmentDocument.create({
+      data: {
+        name,
+        fileUrl,
+        fileType: file.mimetype,
+        expiryDate: expiryDate ? new Date(expiryDate) : null,
+        notes: notes || null,
+        studentId,
+      },
+    });
+
+    await this.prisma.enrollmentActivity.create({
+      data: {
+        type: "DOCUMENT_UPLOAD",
+        message: `Document uploaded: ${name}`,
+        studentId,
+        userId,
+      },
+    });
+
+    return doc;
+  }
   // DELETE STUDENT
 
   async remove(id: string) {
@@ -1079,6 +1151,8 @@ export class EnrolledService {
     // Risk: Fee not paid & stage beyond FEE_PAID
     const stageOrder = [
       "LEAD_CONVERTED",
+      "APPLICATION_SUBMITTED",
+      "OFFER_RECEIVED",
       "FEE_PAID",
       "CAS_I20_ISSUED",
       "VISA_FILED",
@@ -1100,7 +1174,7 @@ export class EnrolledService {
 
     // Risk: CAS/I-20 not issued but stage requires it
     if (
-      currentStageIdx >= 2 &&
+      currentStageIdx >= 4 &&
       !student.casRef &&
       !existingRiskTypes.has("CAS_PENDING")
     ) {
@@ -1145,6 +1219,13 @@ export class EnrolledService {
           type: { in: ["VISA_DEADLINE", "INTAKE_APPROACHING"] },
           isResolved: false,
         },
+        data: { isResolved: true, resolvedAt: now },
+      });
+    }
+
+    if (student.casRef) {
+      await this.prisma.enrollmentRisk.updateMany({
+        where: { studentId, type: "CAS_PENDING", isResolved: false },
         data: { isResolved: true, resolvedAt: now },
       });
     }

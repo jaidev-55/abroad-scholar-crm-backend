@@ -9,14 +9,19 @@ import {
   Put,
   Query,
   Req,
+  UseInterceptors,
+  UploadedFile,
   UseGuards,
 } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { FileValidationPipe } from "../common/file-validation.pipe";
 import { EnrolledService } from "./Enrolled.service";
 import { EnrollmentStage } from "@prisma/client";
 import { CreateEnrolledStudentDto } from "./dto/Create enrolled.dto";
 import { EnrolledQueryDto } from "./dto/Enrolled query.dto";
 import { UpdateEnrolledStudentDto } from "./dto/Update enrolled.dto";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
 import {
   CreateCommissionDto,
   RecordCommissionPaymentDto,
@@ -38,38 +43,38 @@ import { UpdateVisaDetailDto } from "./dto/Visa detail.dto";
 export class EnrolledController {
   constructor(private readonly enrolledService: EnrolledService) {}
 
-  // STATS (dashboard cards)
+  // ── STATS ─────────────────────────────────────────────────────
   @Get("stats")
   getStats() {
     return this.enrolledService.getStats();
   }
 
-  // FILTER OPTIONS
+  // ── FILTER OPTIONS ────────────────────────────────────────────
   @Get("filters")
   getFilterOptions() {
     return this.enrolledService.getFilterOptions();
   }
 
-  // EXPORT ALL
+  // ── EXPORT ────────────────────────────────────────────────────
   @Get("export")
   exportAll() {
     return this.enrolledService.exportAll();
   }
 
-  // LIST ALL
+  // ── LIST ALL ──────────────────────────────────────────────────
   @Get()
   findAll(@Query() query: EnrolledQueryDto) {
     return this.enrolledService.findAll(query);
   }
 
-  // GET SINGLE STUDENT
-  @Get(":id")
-  findOne(@Param("id") id: string) {
-    return this.enrolledService.findOne(id);
+  // ── CREATE ───────────────────────
+
+  @Post()
+  create(@Body() dto: CreateEnrolledStudentDto, @Req() req: any) {
+    return this.enrolledService.create(dto, req.user?.id);
   }
 
-  // CREATE (Enroll New Student)
-
+  // ── ENROLL FROM LEAD ──────────────────────────────────────────
   @Post("from-lead/:leadId")
   enrollFromLead(
     @Param("leadId") leadId: string,
@@ -79,8 +84,13 @@ export class EnrolledController {
     return this.enrolledService.enrollFromLead(leadId, dto, req.user?.id);
   }
 
-  // UPDATE STUDENT
+  // ── GET SINGLE STUDENT ────────────────────────────────────────
+  @Get(":id")
+  findOne(@Param("id") id: string) {
+    return this.enrolledService.findOne(id);
+  }
 
+  // ── UPDATE STUDENT ────────────────────────────────────────────
   @Put(":id")
   update(
     @Param("id") id: string,
@@ -90,17 +100,18 @@ export class EnrolledController {
     return this.enrolledService.update(id, dto, req.user?.id);
   }
 
-  // UPDATE STAGE
+  // ── UPDATE STAGE ──────────────────────────────────────────────
   @Patch(":id/stage")
   updateStage(
     @Param("id") id: string,
     @Body("stage") stage: EnrollmentStage,
+    @Body("note") note: string,
     @Req() req: any,
   ) {
-    return this.enrolledService.updateStage(id, stage, req.user?.id);
+    return this.enrolledService.updateStage(id, stage, req.user?.id, note);
   }
 
-  // ADD NOTE
+  // ── ADD NOTE ──────────────────────────────────────────────────
   @Post(":id/notes")
   addNote(
     @Param("id") id: string,
@@ -110,27 +121,25 @@ export class EnrolledController {
     return this.enrolledService.addNote(id, message, req.user?.id);
   }
 
-  // GET ACTIVITY TIMELINE
+  // ── ACTIVITY TIMELINE ─────────────────────────────────────────
   @Get(":id/activities")
   getActivities(@Param("id") id: string, @Query("limit") limit?: number) {
     return this.enrolledService.getActivities(id, limit ? +limit : 50);
   }
 
-  //  RESOLVE RISK
-
+  // ── RESOLVE RISK ──────────────────────────────────────────────
   @Patch("risks/:riskId/resolve")
   resolveRisk(@Param("riskId") riskId: string, @Req() req: any) {
     return this.enrolledService.resolveRisk(riskId, req.user?.id);
   }
 
-  // DELETE STUDENT
+  // ── DELETE STUDENT ────────────────────────────────────────────
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.enrolledService.remove(id);
   }
 
-  // VISA ENDPOINTS
-
+  // ── VISA ──────────────────────────────────────────────────────
   @Get(":id/visa")
   getVisaDetail(@Param("id") id: string) {
     return this.enrolledService.getVisaDetail(id);
@@ -145,7 +154,7 @@ export class EnrolledController {
     return this.enrolledService.upsertVisaDetail(id, dto, req.user?.id);
   }
 
-  // FEE PAYMENT ENDPOINTS
+  // ── FEE PAYMENTS ──────────────────────────────────────────────
   @Get(":id/fees")
   getFeePayments(@Param("id") id: string) {
     return this.enrolledService.getFeePayments(id);
@@ -175,28 +184,36 @@ export class EnrolledController {
     return this.enrolledService.deleteFeePayment(id, feeId);
   }
 
-  // DOCUMENT ENDPOINTS
-
+  // ── DOCUMENTS ─────────────────────────────────────────────────
   @Get(":id/documents")
   getDocuments(@Param("id") id: string) {
     return this.enrolledService.getDocuments(id);
   }
 
   @Post(":id/documents")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
   createDocument(
     @Param("id") id: string,
-    @Body() dto: UploadDocumentDto & { fileUrl: string; fileType: string },
+    @UploadedFile(new FileValidationPipe()) file: Express.Multer.File,
+    @Body("name") name: string,
+    @Body("expiryDate") expiryDate: string,
+    @Body("notes") notes: string,
     @Req() req: any,
   ) {
-    return this.enrolledService.createDocument(
+    return this.enrolledService.createDocumentWithFile(
       id,
-      dto,
-      dto.fileUrl,
-      dto.fileType,
+      file,
+      name,
+      expiryDate,
+      notes,
       req.user?.id,
     );
   }
-
   @Put(":id/documents/:docId")
   updateDocument(
     @Param("docId") docId: string,
@@ -216,8 +233,7 @@ export class EnrolledController {
     return this.enrolledService.deleteDocument(docId, req.user?.id);
   }
 
-  // PRE-DEPARTURE ENDPOINTS
-
+  // ── PRE-DEPARTURE ─────────────────────────────────────────────
   @Get(":id/pre-departure")
   getPreDeparture(@Param("id") id: string) {
     return this.enrolledService.getPreDeparture(id);
@@ -250,8 +266,7 @@ export class EnrolledController {
     return this.enrolledService.deletePreDepartureItem(itemId);
   }
 
-  // COMMISSION ENDPOINTS
-
+  // ── COMMISSION ────────────────────────────────────────────────
   @Get(":id/commission")
   getCommission(@Param("id") id: string) {
     return this.enrolledService.getCommission(id);

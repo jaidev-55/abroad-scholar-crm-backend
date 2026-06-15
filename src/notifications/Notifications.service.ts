@@ -3,12 +3,20 @@ import { PrismaService } from "../prisma/prisma.service";
 
 export interface NotificationItem {
   id: string;
-  type: "new_lead" | "followup" | "overdue" | "hot";
+  type:
+    | "new_lead"
+    | "followup"
+    | "overdue"
+    | "hot"
+    | "enrolled_risk"
+    | "visa_expiry"
+    | "intake_near";
   title: string;
   subtitle: string;
   time: string;
   priority: "high" | "medium" | "low";
-  leadId: string;
+  leadId?: string;
+  studentId?: string;
   read: boolean;
 }
 
@@ -158,7 +166,120 @@ export class NotificationsService {
       });
     });
 
-    // ── Sort: high priority first, then by time (newest first) ───────────────
+    // ENROLLED STUDENT NOTIFICATIONS
+
+    // Active risk alerts on enrolled students
+    const activeRisks = await this.prisma.enrollmentRisk.findMany({
+      where: {
+        isResolved: false,
+        student: counselorFilter,
+      },
+      include: {
+        student: {
+          select: {
+            id: true,
+            fullName: true,
+            studentId: true,
+            counselorId: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    });
+    activeRisks.forEach((risk) => {
+      const priorityMap: Record<string, "high" | "medium" | "low"> = {
+        VISA_REJECTED: "high",
+        INTAKE_APPROACHING: "high",
+        FEE_OVERDUE: "medium",
+        CAS_PENDING: "medium",
+      };
+
+      notifications.push({
+        id: `risk-${risk.id}`,
+        type: "enrolled_risk",
+        title: `${risk.student.fullName} (${risk.student.studentId})`,
+        subtitle: risk.message,
+        time: risk.createdAt.toISOString(),
+        priority: priorityMap[risk.type] ?? "medium",
+        studentId: risk.student.id,
+        read: false,
+      });
+    });
+
+    //  Intake approaching within 30 days (even without a risk record)
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
+    const nearIntake = await this.prisma.enrolledStudent.findMany({
+      where: {
+        ...counselorFilter,
+        intakeDate: { gte: today, lte: thirtyDaysFromNow },
+        stage: { not: "TRAVEL_DONE" },
+      },
+      select: {
+        id: true,
+        fullName: true,
+        studentId: true,
+        intakeDate: true,
+        stage: true,
+      },
+      orderBy: { intakeDate: "asc" },
+      take: 20,
+    });
+
+    nearIntake.forEach((student) => {
+      const daysLeft = Math.ceil(
+        (student.intakeDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+      );
+      // Avoid duplicate if risk already covers this
+      const alreadyHasRisk = activeRisks.some(
+        (r) => r.student.id === student.id && r.type === "INTAKE_APPROACHING",
+      );
+      if (!alreadyHasRisk) {
+        notifications.push({
+          id: `intake-${student.id}`,
+          type: "intake_near",
+          title: `Intake soon: ${student.fullName}`,
+          subtitle: `${daysLeft} day${daysLeft !== 1 ? "s" : ""} to intake — currently at ${student.stage.replace(/_/g, " ").toLowerCase()}`,
+          time: student.intakeDate.toISOString(),
+          priority: daysLeft <= 7 ? "high" : "medium",
+          studentId: student.id,
+          read: false,
+        });
+      }
+    });
+
+    // 7. Visa not started but stage is advanced
+    const visaNotStarted = await this.prisma.enrolledStudent.findMany({
+      where: {
+        ...counselorFilter,
+        visaStatus: "NOT_STARTED",
+        stage: { in: ["CAS_I20_ISSUED", "VISA_FILED", "VISA_APPROVED"] },
+      },
+      select: {
+        id: true,
+        fullName: true,
+        studentId: true,
+        stage: true,
+        updatedAt: true,
+      },
+      take: 10,
+    });
+
+    visaNotStarted.forEach((student) => {
+      notifications.push({
+        id: `visa-notstarted-${student.id}`,
+        type: "visa_expiry",
+        title: `Visa not started: ${student.fullName}`,
+        subtitle: `Stage is ${student.stage.replace(/_/g, " ").toLowerCase()} but visa processing hasn't begun`,
+        time: student.updatedAt.toISOString(),
+        priority: "high",
+        studentId: student.id,
+        read: false,
+      });
+    });
+    // Sort: high priority first, then by time (newest first)
     const order: Record<string, number> = { high: 0, medium: 1, low: 2 };
     notifications.sort((a, b) => {
       const pd = order[a.priority] - order[b.priority];

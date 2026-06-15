@@ -28,7 +28,6 @@ import { VerifyOtpDto } from "./dto/verify-otp.dto";
 import { ResendOtpDto } from "./dto/resend-otp.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
-import { Request } from "express";
 import { UserRole } from "@prisma/client";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
@@ -61,9 +60,8 @@ export class AuthController {
   // Get logged-in user profile
   @Get("me")
   @UseGuards(JwtAuthGuard)
-  getCurrentUser(@Req() req: Request) {
-    const userId = (req.user as { sub: string }).sub;
-    return this.authService.getMe(userId);
+  getMe(@Req() req: any) {
+    return this.authService.getMe(req.user.id);
   }
 
   // List Users
@@ -88,11 +86,8 @@ export class AuthController {
   @Patch("profile")
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Update own profile (name & email only)" })
-  updateProfile(@Req() req: Request, @Body() dto: UpdateProfileDto) {
-    return this.authService.updateProfile(
-      (req.user as { sub: string }).sub,
-      dto,
-    );
+  updateProfile(@Req() req: any, @Body() dto: UpdateProfileDto) {
+    return this.authService.updateProfile(req.user.id, dto);
   }
 
   // Admin-only — can update any user including their role
@@ -109,9 +104,9 @@ export class AuthController {
   @Patch("change-password")
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Change password for logged-in user" })
-  changePassword(@Req() req: Request, @Body() dto: ChangePasswordDto) {
+  changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(
-      (req.user as { sub: string }).sub,
+      req.user.id,
       dto.currentPassword,
       dto.newPassword,
     );
