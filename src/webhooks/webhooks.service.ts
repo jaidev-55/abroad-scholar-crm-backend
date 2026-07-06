@@ -19,28 +19,6 @@ export class WebhooksService {
     private emailService: EmailService,
   ) {}
 
-  // ─── HELPER: find a phone value regardless of the exact field key ───
-  // ← CHANGED (new): Meta custom questions get slugified keys like
-  // "what_is_your_phone_number" / "contact_number" / "mobile", so a strict
-  // getValue("phone_number") misses them. Match loosely instead.
-  private extractPhone(fields: any[]): string | null {
-    const field = fields.find((f: any) => {
-      const n = (f?.name ?? "").toLowerCase();
-      return (
-        n.includes("phone") || n.includes("mobile") || n.includes("contact")
-      );
-    });
-    return field?.values?.[0] ?? null;
-  }
-
-  // ─── HELPER: normalize a phone into a consistent stored form ───
-  // ← CHANGED (new): the old .replace(/^(\+)/, "$1") was a no-op. Strip
-  // spaces, dashes, parens; keep a single leading +. Used everywhere a phone
-  // is stored or looked up so dedup/blacklist checks always match.
-  private normalizePhone(raw: string): string {
-    return raw.replace(/[\s\-()]/g, "");
-  }
-
   // ─── AUTO-SYNC CRON (Every 1 minutes) ───
   @Cron("*/1 * * * *")
   async autoSyncAllForms() {
@@ -172,7 +150,7 @@ export class WebhooksService {
 
       return {
         fullName: getValue("full_name") ?? getValue("name") ?? "Unknown",
-        phone: this.extractPhone(fields), // ← CHANGED: loose phone match
+        phone: getValue("phone_number") ?? getValue("phone"),
         email: getValue("email"),
         country: getValue("city") ?? getValue("country") ?? "Unknown",
       };
@@ -210,15 +188,8 @@ export class WebhooksService {
         const getValue = (name: string) =>
           fields.find((f: any) => f.name === name)?.values?.[0] ?? null;
 
-        const phone = this.extractPhone(fields); // ← CHANGED: loose phone match
+        const phone = getValue("phone_number") ?? getValue("phone");
         if (!phone) {
-          // ← CHANGED: log the field keys so a still-skipped row tells us
-          // exactly what the phone question is named on this form.
-          this.logger.warn(
-            `No phone found. Keys: [${fields
-              .map((f: any) => f.name)
-              .join(", ")}]`,
-          );
           skipped++;
           continue;
         }
@@ -285,7 +256,7 @@ export class WebhooksService {
   // ─── CREATE LEAD + ROUND-ROBIN ASSIGN ───
   async createLeadFromWebhook(data: {
     fullName: string;
-    phone: string | null;
+    phone: string;
     email?: string;
     country?: string;
     source: "META_ADS" | "GOOGLE_ADS";
@@ -298,7 +269,7 @@ export class WebhooksService {
       return;
     }
 
-    const cleanPhone = this.normalizePhone(data.phone); // ← CHANGED: real normalization
+    const cleanPhone = data.phone.replace(/\s+/g, "").replace(/^(\+)/, "$1");
 
     const existing = await this.prisma.lead.findUnique({
       where: { phone: cleanPhone },
